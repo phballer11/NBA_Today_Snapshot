@@ -27,6 +27,7 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 
 - Every game on the selected NBA date, live first. There are no game filters, pinning controls or scores-only mode.
 - Tap a matchup in the game navigation to jump to its card. The destination receives keyboard focus.
+- Portrait phones use one column. Landscape screens from 640px wide use two game-card columns, with compact scoreboards and player names above the stats; wide desktop screens also use two columns. Landscape spacing respects the iPhone notch and safe areas.
 - Bigger game clocks and tip-off times. The title, current time, tip-offs and last-update time use the device's time zone and locale. Each tip-off includes its date and zone abbreviation. No fixed Auckland zone is used in the interface.
 - The NBA date selector remains a US Eastern game date. **Today** opens the current NBA slate, retaining the previous Eastern date until 06:00 ET so late games remain visible. Returning to the app follows the new slate if you were viewing Today.
 - Team abbreviations, full team names, scores, season records and conference positions. A compact scoring table shows Q1–Q4, each applicable overtime period (OT1, OT2, etc.) and the total. Live quarters show their score so far; future or missing quarters show a dash.

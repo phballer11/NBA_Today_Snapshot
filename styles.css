@@ -13,7 +13,7 @@ button:hover { background:#25303a; }
 button:disabled { opacity:.5; cursor:wait; }
 button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visible { outline:2px solid var(--lime); outline-offset:4px; }
 a { color:var(--cyan); }
-.shell { max-width:1200px; margin:auto; padding:calc(24px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom)); }
+.shell { max-width:1200px; margin:auto; padding:calc(24px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left)); }
 .brand { display:flex; align-items:center; gap:11px; font-size:10px; font-weight:750; letter-spacing:1.6px; color:#b6c1ce; }
 .brand-mark { display:grid; place-content:center; position:relative; background:var(--lime); color:#17220d; width:30px; height:30px; border-radius:8px; font-size:20px; letter-spacing:-2px; font-weight:900; }
 .brand-mark span { color:#17220d; font-size:13px; position:absolute; right:4px; top:1px; }
@@ -101,7 +101,11 @@ input[type=date] { background:transparent; color:var(--text); border:0; font-siz
   .games { grid-template-columns:1fr; max-width:620px; margin:auto; }
   .shell { max-width:680px; }
 }
-@media(max-width:600px) {
+@media(min-width:640px) and (max-width:1050px) and (orientation:landscape) {
+  .shell { max-width:1200px; }
+  .games { grid-template-columns:repeat(2,minmax(0,1fr)); max-width:none; gap:12px; }
+}
+@media(max-width:600px), (min-width:640px) and (max-width:1050px) and (orientation:landscape) {
   .stats thead tr,.stats tbody tr { display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); }
   .stats thead .player-label { display:none; }
   .stats thead th:not(:first-child),.stats td { width:auto; }
@@ -122,20 +126,25 @@ input[type=date] { background:transparent; color:var(--text); border:0; font-siz
   .slate-info { display:block; }
   .slate-info #updated { display:block; margin-top:4px; }
   .game-jump { padding:0 10px; font-size:10px; }
+  .date-nav { gap:4px; }
+  .date-nav>button { min-width:32px; padding:0 9px; }
+  input[type=date] { min-width:116px; max-width:122px; font-size:11px; }
+  .date-label { padding:0 5px; }
+}
+@media(max-width:500px), (min-width:640px) and (max-width:1050px) and (orientation:landscape) {
   .scoreboard { gap:6px; padding:16px 12px; }
   .score-pair { font-size:30px; gap:6px; }
   .team-code { font-size:22px; }
-  .team-name { font-size:10px; }
+  .team-name { font-size:10px; overflow-wrap:anywhere; }
   .game-top { padding-left:12px; padding-right:12px; }
   .status { font-size:16px; }
   .tip { font-size:12px; }
   .box { padding:11px 9px; }
   .notes { margin-left:12px; margin-right:12px; }
   .team-record { font-size:9px; }
-  .date-nav { gap:4px; }
-  .date-nav>button { min-width:32px; padding:0 9px; }
-  input[type=date] { min-width:116px; max-width:122px; font-size:11px; }
-  .date-label { padding:0 5px; }
+}
+@media(min-width:640px) and (max-width:740px) and (orientation:landscape) {
+  .stats tbody td:nth-last-child(-n+3) { font-size:11px; }
 }
 @media(max-width:360px) { .stats tbody td { font-size:11.5px; } .tip { font-size:11px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; scroll-behavior:auto!important; } }
