@@ -27,7 +27,7 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 
 - Every game on the selected NBA date, live first. There are no game filters, pinning controls or scores-only mode.
 - Tap a matchup in the game navigation to jump to its card. The destination receives keyboard focus.
-- Portrait phones use one column. Landscape screens from 640px wide use two game-card columns, with compact scoreboards and player names above the stats; wide desktop screens also use two columns. Landscape spacing respects the iPhone notch and safe areas.
+- The game grid uses two columns when at least 540 CSS pixels of usable content remain after page padding and system safe areas; otherwise it uses one. Named CSS container queries update automatically on rotate, fold and resize. Player tables adapt to each card’s width. Left and right insets are independent, including the Duo’s right-edge status area; small-screen rules never overwrite them. No hardware-resolution, device-name or orientation assumption determines the columns.
 - Bigger game clocks and tip-off times. The title, current time, tip-offs and last-update time use the device's time zone and locale. Each tip-off includes its date and zone abbreviation. No fixed Auckland zone is used in the interface.
 - The NBA date selector remains a US Eastern game date. **Today** opens the current NBA slate, retaining the previous Eastern date until 06:00 ET so late games remain visible. Returning to the app follows the new slate if you were viewing Today.
 - Team abbreviations, full team names, scores, season records and conference positions. A compact scoring table shows Q1–Q4, each applicable overtime period (OT1, OT2, etc.) and the total. Live quarters show their score so far; future or missing quarters show a dash.
@@ -37,6 +37,13 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 - No footer logo, slogan or website explanation. Data/ranking details are documented here rather than taking space on the scoreboard.
 - Loading skeletons, score-first rendering, manual refresh, last-fetch age, stale/empty/error states, reduced-motion support, accessible tables and keyboard navigation.
 - Latest five viewed slates cached for seven days; offline shell and bounded snapshot cache. Saved in-progress games say **LAST SEEN**. The clock is observed feed data; it is never advanced by an invented countdown.
+
+
+### iPhone Duo layout validation
+
+[Apple’s specs](https://www.apple.com/iphone-duo/specs/) list the inner panel as 2670 × 1878 physical pixels and the outer panel as 2034 × 1398 in landscape. Physical pixels do not determine the browser’s usable CSS viewport. [Direct measurements on a Duo](https://chadworks.co/iphone-duo-viewport-sizes/) report folded Safari landscape at 594 × 368 CSS pixels (84 pixels narrower than the 678-wide panel viewport), folded Home Screen landscape at 678 × 445, open Home Screen landscape at 951 × 648, open Safari landscape at 951 × 589, and open Chrome landscape at 871 × 553. Those measurements are from one iOS version; the site uses the actual available space and `env(safe-area-inset-*)`, rather than hard-coding a rail width. The old 640px landscape cutoff missed the 594px case.
+
+Validation covers those reduced viewports, folded portrait at 382/466 pixels, open upright at 669 pixels, split view at 385 pixels, and a simulated 84px right safe-area inset. These are browser layout checks; a current Duo/iOS simulator is not installed here, so native Safari/Home Screen behavior on the user’s phone still needs device confirmation.
 
 ## Data limitations
 
