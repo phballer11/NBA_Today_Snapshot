@@ -3,3 +3,6 @@ node_modules/
 _site/
 *.tmp
 work/
+
+# Collector metadata is cached by Actions, not published or committed.
+data/highlights/catalog.json

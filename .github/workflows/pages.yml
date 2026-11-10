@@ -13,9 +13,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event_name != 'schedule' || vars.ENABLE_SNAPSHOTS == 'true'
+    if: github.event_name != 'schedule' || vars.ENABLE_SNAPSHOTS == 'true' || vars.ENABLE_HIGHLIGHTS == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     permissions:
       contents: read
       pages: write
@@ -41,11 +41,19 @@ jobs:
       - name: Report feed failure
         if: steps.snapshot.outcome == 'failure'
         run: echo '::warning::ESPN snapshot collection failed. Previously saved data is retained; browser live fetching remains enabled.'
+      - name: Collect game-matched YouTube links
+        id: highlights
+        continue-on-error: true
+        run: node scripts/highlights.mjs
+      - name: Report highlight lookup failure
+        if: steps.highlights.outcome == 'failure'
+        run: echo '::warning::Highlight discovery unavailable. Previously matched links are retained; scores can still deploy.'
       - name: Stage only public website files
         run: |
           mkdir -p _site
           cp index.html styles.css sw.js manifest.webmanifest _site/
           cp -R js icons data _site/
+          rm -f _site/data/highlights/catalog.json
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4

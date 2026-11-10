@@ -73,10 +73,38 @@ The service-worker cache is versioned. Reload an open page to obtain an update; 
 
 ## Files
 
-`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared parsing, ranking, notes and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: collection and deployment. `data/`: dated fallback snapshots.
+`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared parsing, ranking, notes and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: collection and deployment. `scripts/highlights.mjs`: YouTube collection. `js/highlights.mjs`: link rendering. `data/`: dated fallback snapshots.
 
 ## References
 
 - [GitHub Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 - [GitHub schedule limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - [Game Score formula](https://www.basketball-reference.com/about/glossary.html)
+
+## YouTube game highlights (key-free)
+
+Each card ends with direct YouTube links, grouped into **Full game** and **Player highlights**. Every accepted match is shown; links are not limited to the five displayed players. Only FreeDawkins (`@FreeDawkins`), NBA (`@NBA`) and NBA Japan (`@NBAJPN`) are included. There are no embeds, thumbnails, videos downloaded to the site, API keys, logins, cookies, proxy services, or new dependencies.
+
+The collector runs with the existing GitHub Actions deployment. It tries public channel RSS first and falls back to the public uploads page if RSS is unavailable. It reads only data already included in public HTML, without executing YouTube code or calling its internal APIs. Matching uses two passes:
+
+- **Direct match:** an explicit game date plus both teams (full game) or a named player and their opponent (player highlights). Uploads must fall between tip-off and 72 hours later. Japanese dates explicitly marked 日本時間 are compared in Japan time; name/team aliases support Japanese metadata.
+- **Corroborated player match:** covers milestone titles that omit the opponent or date. Require one named player, highlight wording, publication 90 minutes to 18 hours after tip-off, and a separate, directly matched player video from another approved channel for the same game. With an explicit game date, at least one title statistic must match. Without a date, require at least three distinct matching title statistics, including points, plus current-game wording such as “tonight.” Corroborated matches never validate other corroborated matches.
+
+For both paths, stated final scores and single-player title statistics must agree with the final box score. Supported claims are PTS, REB, AST, STL and BLK; `30+ PTS` means at least 30, while `43 PTS` means exactly 43. Conflicting title dates, named third teams in titles or explicit opponent clauses, mismatched statistics, and videos matching multiple games are rejected. Whole-slate recaps, previews, interviews and historical compilations are excluded. The JSON records the match method, checked statistics and corroborating video IDs for inspection. No video IDs are hard-coded into matching rules.
+
+This is conservative metadata matching, not verification of the footage itself. Discovery covers the recent videos exposed by the three public pages/feeds and retains previously matched links. It cannot guarantee every related upload or arbitrary historical backfill. Unknown Japanese player aliases may reduce coverage; they must be added explicitly rather than guessed. Initial discovery is for completed games only.
+
+Enable repository variable `ENABLE_HIGHLIGHTS=true` to run the existing 15-minute schedule even when `ENABLE_SNAPSHOTS` is unset. Either variable enables the scheduled job; pushes/manual deployments collect links too. The workflow refreshes score snapshots before highlights and continues deployment if highlight discovery fails. The browser cannot trigger collection: selecting a date reads the already-published JSON immediately, independently of live ESPN score refreshes. It refreshes links at most every five minutes while visible, or on manual Refresh. It retains the last viewed link files offline.
+
+Run locally after collecting score snapshots:
+
+```sh
+node scripts/snapshot.mjs
+node scripts/highlights.mjs
+# Optional: only match a particular NBA date already present in data/
+node scripts/highlights.mjs 2026-11-09
+```
+
+Dated public files are saved under `data/highlights/YYYY-MM-DD.json`, keyed by ESPN game ID. Up to 60 dated files are retained. The 30-day recent metadata catalog is cached by Actions but excluded from the deployed website. Feed or lookup failures preserve prior accepted links; the card shows when lookup was partial and when the data was checked. Actions cache is best effort rather than durable storage, so older deployed archives are not guaranteed to survive a cache eviction. A deleted/region-blocked YouTube video may still have a saved link.
+
+YouTube can alter/block its feeds or public pages, including from GitHub runner networks. Failed discovery must leave scores usable. Actual GitHub-hosted collection is only confirmed after the workflow is deployed and run. No unit tests or test packages are included; validation uses syntax checks, actual collection and browser review.

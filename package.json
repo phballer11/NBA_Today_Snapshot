@@ -1,11 +1,12 @@
 {
   "name": "nba-today-snapshot",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "snapshot": "node scripts/snapshot.mjs",
-    "serve": "python3 -m http.server 8080"
+    "serve": "python3 -m http.server 8080",
+    "highlights": "node scripts/highlights.mjs"
   },
   "engines": {
     "node": ">=22"
