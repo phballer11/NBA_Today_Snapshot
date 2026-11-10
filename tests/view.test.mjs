@@ -22,7 +22,11 @@ test('game notes use the same new thresholds, including defense and non-scoring 
 });
 test('player table includes turnovers, escapes names, and highlights only qualifying values',()=>{
   const html=playerTable({code:'LAL',name:'Los Angeles Lakers',ranking:'Game Score',players:[{name:'Name <script>',jersey:'77',rating:30,pts:20,reb:9,ast:10,stl:4,blk:3,to:6,fgm:8,fga:20,tpm:2,tpa:7,ftm:2,fta:2}]});
-  assert.match(html,/>TO<\/th>/);assert.match(html,/>6<\/td>/);
+  assert.match(html,/>TO<\/th>/);assert.match(html,/class="stat-turnover">6<\/td>/);
+  for(const [to,expected] of [[4,false],[5,true],[6,true],[null,false]]) {
+    const table=playerTable({code:"A",name:"Team",ranking:"Game Score",players:[{name:"Player",rating:null,jersey:null,to}]});
+    assert.equal(table.includes('class="stat-turnover"'),expected);
+  }
   assert.equal((html.match(/class="stat-highlight"/g)||[]).length,3);
   assert.match(html,/Name &lt;script&gt;/);assert.doesNotMatch(html,/TOP FIVE|<script>/);
 });
