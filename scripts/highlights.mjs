@@ -41,20 +41,31 @@ function assignedJSON(html,name){
  throw new Error('Incomplete public page data');
 }
 function walk(value,fn){if(!value||typeof value!=='object')return;fn(value);for(const child of Object.values(value))walk(child,fn);}
+function publicationWindow(parts){
+ const units={second:1000,sec:1000,minute:60000,min:60000,hour:3600000,hr:3600000,h:3600000,day:86400000,d:86400000,week:604800000,w:604800000};
+ for(const text of parts.filter(x=>typeof x==='string')){
+  const match=/^(?:Premiered\s+)?(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|h|d|w)\s+ago$/i.exec(text.trim());
+  if(!match)continue;
+  const count=+match[1],unit=units[match[2].toLowerCase().replace(/s$/,'')],now=Date.now();
+  // Human-readable ages are rounded: retain an interval, never invent an exact timestamp.
+  return {earliest:new Date(now-(count+1)*unit).toISOString(),latest:new Date(now-Math.max(0,count-1)*unit).toISOString(),observedAt:new Date(now).toISOString(),label:text};
+ }
+ return null;
+}
 async function discover(channel){
  try{
   const xml=await publicText(`https://www.youtube.com/feeds/videos.xml?channel_id=${channel.id}`);
   if(!/<feed[\s>]/.test(xml))throw new Error('Not an Atom feed');
-  const videos=[...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([,entry])=>({id:entry.match(/<yt:videoId>([^<]+)</)?.[1],title:decode(entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]),channelId:channel.id})).filter(v=>/^[\w-]{11}$/.test(v.id));
+  const videos=[...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([,entry])=>({id:entry.match(/<yt:videoId>([^<]+)</)?.[1],title:decode(entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]),channelId:channel.id,publishedAt:entry.match(/<published>([^<]+)</)?.[1],description:decode(entry.match(/<media:description>([\s\S]*?)<\/media:description>/)?.[1]),metadataSource:'rss'})).filter(v=>/^[\w-]{11}$/.test(v.id));
   if(!videos.length)throw new Error('Empty feed');return {videos,method:'rss'};
  }catch{
-  const html=await publicText(`https://www.youtube.com/@${channel.handle}/videos`);
+  const html=await publicText(`https://www.youtube.com/@${channel.handle}/videos?hl=en`);
   if(!html.includes(`"externalId":"${channel.id}"`))throw new Error('Channel identity not confirmed');
   const raw=assignedJSON(html,'ytInitialData'),videos=[];
   walk(raw,node=>{
    const modern=node.lockupViewModel,classic=node.videoRenderer;
-   if(modern?.contentId)videos.push({id:modern.contentId,title:modern.metadata?.lockupMetadataViewModel?.title?.content||'',channelId:channel.id});
-   else if(classic?.videoId)videos.push({id:classic.videoId,title:classic.title?.simpleText||classic.title?.runs?.map(r=>r.text).join('')||'',channelId:channel.id});
+   if(modern?.contentId){const meta=modern.metadata?.lockupMetadataViewModel;const parts=(meta?.metadata?.contentMetadataViewModel?.metadataRows||[]).flatMap(r=>(r.metadataParts||[]).map(p=>p.text?.content));videos.push({id:modern.contentId,title:meta?.title?.content||'',channelId:channel.id,publicationWindow:publicationWindow(parts),description:'',metadataSource:'channel-page'});}
+   else if(classic?.videoId)videos.push({id:classic.videoId,title:classic.title?.simpleText||classic.title?.runs?.map(r=>r.text).join('')||'',channelId:channel.id,publicationWindow:publicationWindow([classic.publishedTimeText?.simpleText]),description:'',metadataSource:'channel-page'});
   });
   const unique=[...new Map(videos.filter(v=>/^[\w-]{11}$/.test(v.id)&&v.title).map(v=>[v.id,v])).values()];
   if(!unique.length)throw new Error('No readable public uploads');return {videos:unique,method:'public-page'};
@@ -101,9 +112,9 @@ function claimedStats(title,player){
  return claims;
 }
 function matchVideo(video,game,anchors=null){
- if(game.state!=='post'||!video.publishedAt)return null;
- const published=Date.parse(video.publishedAt),start=Date.parse(game.start);
- if(!Number.isFinite(published)||published<start||published>start+72*3600000)return null;
+ if(game.state!=='post')return null;
+ const published=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest),start=Date.parse(game.start);
+ if(!Number.isFinite(published)||!Number.isFinite(latest)||latest<published||published<start||latest>start+72*3600000)return null;
  const type=classify(video.title);if(!type)return null;
  const description=(video.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200),text=video.title+'\n'+description;
  const players=type==='player'?namedPlayers(video.title,game):[];
@@ -115,6 +126,9 @@ function matchVideo(video,game,anchors=null){
  const titleDates=datesIn(video.title,expected.slice(0,4));if(titleDates.some(d=>!allowed.includes(d)))return null;
  const hasDate=datesIn(text,expected.slice(0,4)).some(d=>allowed.includes(d));
  const hasOpponent=type==='game'||players.some(player=>teamMention(text,player.teamId===game.away.id?game.home:game.away));
+ // Listing-only evidence must identify the date and matchup directly. Never infer
+ // a missing game identity from a rough upload age or an unverified description.
+ if(video.metadataSource==='channel-page'&&(!hasDate||!hasOpponent))return null;
  // A stated final score must agree. Avoid mistaking season labels and dates for scores.
  const pairs=[...text.matchAll(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\b/g)].map(m=>[+m[1],+m[2]]).filter(([a,b])=>a>=50&&b>=50);
  if(pairs.some(([a,b])=>!(a===game.away.score&&b===game.home.score||a===game.home.score&&b===game.away.score)))return null;
@@ -131,12 +145,12 @@ function matchVideo(video,game,anchors=null){
   if(!corroboration.length)return null;
   method='corroborated';
  }
- return {id:video.id,title:video.title,channel:CHANNELS.find(c=>c.id===video.channelId).name,channelId:video.channelId,type,players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt,matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method,dated:hasDate,opponent:hasOpponent,stats:claims,...(corroboration.length?{corroboratingVideoIds:corroboration}:{})}};
+ return {id:video.id,title:video.title,channel:CHANNELS.find(c=>c.id===video.channelId).name,channelId:video.channelId,type,players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method,metadataSource:video.metadataSource||'watch-page',dated:hasDate,opponent:hasOpponent,stats:claims,...(corroboration.length?{corroboratingVideoIds:corroboration}:{})}};
 }
 async function inspect(candidate){
  const html=await publicText(`https://www.youtube.com/watch?v=${candidate.id}`),raw=assignedJSON(html,'ytInitialPlayerResponse'),v=raw.videoDetails,m=raw.microformat?.playerMicroformatRenderer;
- if(v?.videoId!==candidate.id||v.channelId!==candidate.channelId||!v.title||!m?.publishDate)throw new Error('Video identity or publication date unavailable');
- return {id:candidate.id,title:v.title,channelId:v.channelId,description:v.shortDescription||'',publishedAt:m.publishDate,checkedAt:new Date().toISOString()};
+ if(v?.videoId!==candidate.id||v.channelId!==candidate.channelId||!v.title||!m?.publishDate)throw new Error(`Watch metadata unavailable (${raw.playabilityStatus?.status||'missing details'})`);
+ return {id:candidate.id,title:v.title,channelId:v.channelId,description:v.shortDescription||'',publishedAt:m.publishDate,metadataSource:'watch-page',checkedAt:new Date().toISOString()};
 }
 await mkdir(OUT,{recursive:true});
 const supplied=process.argv.slice(2);if(supplied.some(d=>!/^\d{4}-\d{2}-\d{2}$/.test(d)))throw new Error('Dates must be YYYY-MM-DD');
@@ -153,16 +167,23 @@ await mapLimit(CHANNELS,3,async channel=>{
  catch(e){sources.push({channel:channel.name,ok:false,error:e.message});}
 });
 const docs=new Map();for(const slate of slates){const old=await json(new URL(`${slate.date}.json`,OUT),{});docs.set(slate.date,{schema:1,date:slate.date,checkedAt:new Date().toISOString(),sources,games:old.games||{}});}
-let inspected=0,accepted=0,failed=0;
+let inspected=0,accepted=0,failed=0,fallbacks=0;const lookupErrors=new Map();
 const pending=[...candidates.values()].filter(v=>{
  if(!classify(v.title))return false;
  return games.some(g=>{const dated=datesIn(v.title,g.date.slice(0,4));if(dated.length&&!dated.includes(g.date)&&!dated.includes(dateInZone(new Date(g.start),'Asia/Tokyo')))return false;return classify(v.title)==='game'?teamMention(v.title,g.away)&&teamMention(v.title,g.home):namedPlayers(v.title,g).length>0||v.channelId===CHANNELS[2].id&&/得点|リバウンド|アシスト|ブロック|ハイライト/.test(v.title);});
 });
 await mapLimit(pending,3,async candidate=>{
+ let video=catalog.videos[candidate.id];
  try{
-  let video=catalog.videos[candidate.id];
   if(!video||video.title!==candidate.title||Date.now()-Date.parse(video.checkedAt)>6*3600000){video=await inspect(candidate);catalog.videos[video.id]=video;inspected++;}
- }catch{failed++;}
+ }catch(error){
+  failed++;lookupErrors.set(error.message,(lookupErrors.get(error.message)||0)+1);
+  if((candidate.publishedAt||candidate.publicationWindow)&&(!video||video.metadataSource==='channel-page'||video.metadataSource==='rss')){
+   const fallback={...candidate,checkedAt:new Date().toISOString()};
+   // Incomplete listing evidence must not replace a previously verified archive link.
+   if(games.some(game=>matchVideo(fallback,game))){catalog.videos[candidate.id]=fallback;fallbacks++;}
+  }
+ }
 });
 // Match the recent catalog as well as this run's discoveries so an RSS-window change
 // or temporarily unavailable watch page does not discard previously checked metadata.
@@ -181,15 +202,16 @@ for(const [date,doc]of docs){
    // A failed full-roster lookup leaves only the displayed five. Keep previously
    // verified links for other athletes until their roster can be checked again.
    return game.rosterPartial&&link.type==='player'&&link.players?.some(p=>!game.roster.some(r=>r.id===p.id));
-  }).sort((a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt)-Date.parse(b.publishedAt));
+  }).sort((a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt||a.publicationWindow?.latest)-Date.parse(b.publishedAt||b.publicationWindow?.latest));
  }
  doc.lookupPartial=sources.some(s=>!s.ok)||failed>0||games.some(g=>g.date===date&&g.rosterPartial);await atomic(new URL(`${date}.json`,OUT),doc);
  console.log(`${date}: ${Object.values(doc.games).flat().length} game-matched YouTube links`);
 }
 // Keep a bounded recent metadata catalog; dated matched links form the public archive.
 const cutoff=Date.now()-30*86400000;
-catalog.videos=Object.fromEntries(Object.entries(catalog.videos).filter(([,v])=>Date.parse(v.publishedAt)>=cutoff));
+catalog.videos=Object.fromEntries(Object.entries(catalog.videos).filter(([,v])=>Date.parse(v.publishedAt||v.publicationWindow?.latest)>=cutoff));
 await atomic(new URL('catalog.json',OUT),catalog);
 const archive=(await readdir(OUT)).filter(f=>/^\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort().reverse();for(const f of archive.slice(60))await unlink(new URL(f,OUT));
 console.log(`Sources: ${sources.map(s=>`${s.channel}: ${s.ok?s.method:s.error}`).join('; ')}. Inspected ${inspected}, matched ${accepted}, unavailable ${failed}.`);
+if(failed)console.warn(`::warning::${failed} watch lookups unavailable; ${fallbacks} verified channel/RSS metadata fallbacks. ${JSON.stringify(Object.fromEntries(lookupErrors))}`);
 if(sources.every(s=>!s.ok))process.exitCode=1;
