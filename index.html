@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10141d">
+    <meta name="description" content="A quick-glance snapshot of today's NBA games and scores.">
+    <title>NBA Today — Scoreboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="NBA Today home">
+          <span class="brand-mark" aria-hidden="true">NBA</span>
+          <span>Today<span class="brand-period">.</span></span>
+        </a>
+        <span class="source-label"><span class="source-dot"></span> ESPN scoreboard</span>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">THE LEAGUE, AT A GLANCE</p>
+        <h1 id="page-title">NBA scoreboard</h1>
+        <p class="intro-copy">Every matchup. Every score. One quick look.</p>
+      </section>
+
+      <section class="scoreboard" aria-labelledby="games-heading">
+        <div class="scoreboard-heading">
+          <div>
+            <p class="eyebrow">SCHEDULE &amp; RESULTS</p>
+            <h2 id="games-heading">Games <span id="game-count"></span></h2>
+          </div>
+          <div class="date-controls" aria-label="Scoreboard date controls">
+            <button class="icon-button" id="previous-day" type="button" aria-label="Previous day">
+              <span aria-hidden="true">←</span>
+            </button>
+            <label class="date-label">
+              <span class="visually-hidden">Choose a date</span>
+              <input id="game-date" type="date">
+            </label>
+            <button class="icon-button" id="next-day" type="button" aria-label="Next day">
+              <span aria-hidden="true">→</span>
+            </button>
+            <button class="refresh-button" id="refresh" type="button">
+              <span aria-hidden="true">↻</span>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <p class="selected-date" id="selected-date"></p>
+        <div class="status-message" id="status-message" role="status" aria-live="polite">
+          Loading games…
+        </div>
+        <div class="game-grid" id="game-list"></div>
+      </section>
+
+      <footer class="footer">
+        <span>Scores and schedules provided by ESPN.</span>
+        <span>Times shown in your local timezone.</span>
+      </footer>
+    </main>
+  </body>
+</html>
