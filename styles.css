@@ -142,3 +142,13 @@ input[type=date] { background:transparent; color:var(--text); border:0; font-siz
 @media(max-width:360px) {
   .stats tbody td:nth-last-child(-n+3) { font-size:10px; letter-spacing:-.2px; }
 }
+
+.quarter-wrap { margin:0 14px 14px; overflow-x:auto; scrollbar-width:thin; }
+.quarter-scores { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; table-layout:auto; }
+.quarter-scores th,.quarter-scores td { min-width:30px; padding:5px 5px; text-align:center; }
+.quarter-scores thead th { color:var(--muted); font-size:9px; font-weight:550; border-bottom:1px solid var(--line); }
+.quarter-scores tbody th { font-size:11px; font-weight:700; }
+.quarter-scores td { font-size:12px; color:#c6d0dc; }
+.quarter-scores th:first-child { text-align:left; min-width:46px; }
+.quarter-scores thead th.current-period { color:var(--lime); font-weight:750; }
+.quarter-scores td.quarter-total { font-weight:750; color:var(--text); }

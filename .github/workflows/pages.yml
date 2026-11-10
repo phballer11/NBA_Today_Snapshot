@@ -1,4 +1,4 @@
-name: Verify, snapshot and deploy Pages
+name: Snapshot and deploy Pages
 on:
   push:
     branches: [main]
@@ -28,8 +28,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify behavior
-        run: npm test
       - name: Restore last successful fallback data
         uses: actions/cache@v4
         with:

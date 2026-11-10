@@ -14,3 +14,16 @@ export function playerTable(team){
       <tbody>${team.players.map(player=>`<tr role="row"><th scope="row" role="rowheader" class="player" title="${player.rating==null?'Game Score unavailable':`Game Score ${player.rating.toFixed(1)}`}">${esc(player.name)} <span class="jersey">${player.jersey!=null?'#'+esc(player.jersey):''}</span></th>${columns.map(([key])=>`<td role="cell" class="${key==='to' && player.to>=5?'stat-turnover':isHighlightedStat(key,player[key])?'stat-highlight':((key==='reb'||key==='ast') && player[key]>=5 && player[key]<10 || key==='pts' && player.pts>=10 && player.pts<20)?'stat-secondary':''}">${key==='fg'?shooting(player.fgm,player.fga):key==='three'?shooting(player.tpm,player.tpa):key==='ft'?shooting(player.ftm,player.fta):stat(player[key])}</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`:'<p class="muted">Player stats have not arrived yet.</p>'}</section>`;
 }
+
+export function quarterTable(game){
+  const reported=[...(game.away.periods||[]),...(game.home.periods||[])];
+  const count=Math.max(4,game.period||0,...reported.map(line=>line.period));
+  const periods=Array.from({length:count},(_,i)=>i+1);
+  const label=period=>period<=4?`Q${period}`:`OT${period-4}`;
+  const current=period=>game.state==='in' && game.period===period;
+  const value=(team,period)=>{
+    if(game.state==='pre'||game.state==='in' && period>game.period)return '—';
+    return stat(team.periods?.find(line=>line.period===period)?.score);
+  };
+  return `<div class="quarter-wrap" tabindex="0" role="region" aria-label="${esc(game.away.code)} at ${esc(game.home.code)} quarter scoring"><table class="quarter-scores"><caption class="sr-only">Scoring by quarter${game.state==='in' && game.period>0?`; ${label(game.period)} is in progress`:''}. Missing or unplayed periods show a dash.</caption><thead><tr><th scope="col">TEAM</th>${periods.map(period=>`<th scope="col" class="${current(period)?'current-period':''}"${current(period)?' aria-label="'+label(period)+' in progress"':''}>${label(period)}</th>`).join('')}<th scope="col">T</th></tr></thead><tbody>${[game.away,game.home].map(team=>`<tr><th scope="row">${esc(team.code)}</th>${periods.map(period=>`<td>${value(team,period)}</td>`).join('')}<td class="quarter-total">${game.state==='pre'?'—':stat(team.score)}</td></tr>`).join('')}</tbody></table></div>`;
+}

@@ -1,4 +1,4 @@
-const VERSION='nba-today-snapshot-shell-v8';
+const VERSION='nba-today-snapshot-shell-v9';
 const ROOT=new URL('./',self.location.href);
 const SHELL=['./','./index.html','./styles.css','./js/app.mjs','./js/data.mjs','./js/view.mjs','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'].map(p=>new URL(p,ROOT).href);
 self.addEventListener('install',event=>{event.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});

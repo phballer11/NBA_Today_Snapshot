@@ -7,13 +7,13 @@ Repository: https://github.com/phballer11/NBA_Today_Snapshot
 ## Deploy
 
 1. In repository **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**. The workflow is already provided; skip suggested templates.
-2. Push `main` or manually run **Actions → Verify, snapshot and deploy Pages**.
+2. Push `main` or manually run **Actions → Snapshot and deploy Pages**.
 3. Open https://phballer11.github.io/NBA_Today_Snapshot/ after deployment succeeds.
 4. On iPhone Safari: **Share → Add to Home Screen**. First open online to cache the app and viewed scores.
 
 Pages is available for public repositories on GitHub Free; private repositories require an eligible paid plan. The website is normally public even if its source repository is private. No personal access token is required by this workflow.
 
-All asset paths, the PWA manifest and service-worker scope support a GitHub Pages repository subpath. The workflow deploys only public website files, not tests or local Git metadata.
+All asset paths, the PWA manifest and service-worker scope support a GitHub Pages repository subpath. The workflow deploys only public website files, not local Git metadata.
 
 ## Optional snapshot fallback
 
@@ -29,7 +29,7 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 - Tap a matchup in the game navigation to jump to its card. The destination receives keyboard focus.
 - Bigger game clocks and tip-off times. The title, current time, tip-offs and last-update time use the device's time zone and locale. Each tip-off includes its date and zone abbreviation. No fixed Auckland zone is used in the interface.
 - The NBA date selector remains a US Eastern game date. **Today** opens the current NBA slate, retaining the previous Eastern date until 06:00 ET so late games remain visible. Returning to the app follows the new slate if you were viewing Today.
-- Team abbreviations, full team names, scores, season records and conference positions.
+- Team abbreviations, full team names, scores, season records and conference positions. A compact scoring table shows Q1–Q4, each applicable overtime period (OT1, OT2, etc.) and the total. Live quarters show their score so far; future or missing quarters show a dash.
 - Tables are labeled **Box Score**. Five played athletes per team are ranked by Hollinger Game Score. Full names and jerseys; PTS, REB, AST, STL, BLK, TO, FG, 3PT and FT. Shooting is made/attempted. Names sit above evenly spaced numeric columns on phone screens so numbers can be larger. Desktop rows place names alongside their statistics.
 - Stat highlights use number colour only, with no background: Strong performances use bold bright lime: PTS ≥20; REB/AST ≥10; STL/BLK ≥4. PTS from 10–19 and REB/AST from 5–9 use leaf green to signal rising performance, with less brightness and weight than the lime tier. TO ≥5 is highlighted in red, also without a background. Other values retain normal styling. Missing values show `—`.
 - One or two notes drawn from matching player thresholds, triple-doubles or supported scoring runs. Notes are computed from feed data, not editorial news. Scoring runs use ordered score changes; corrected play-by-play suppresses run detection.
@@ -53,7 +53,7 @@ ESPN's inspected `playoffSeed` description calls it a BPI projection. When no re
 
 Game Score penalizes missed shots, turnovers and fouls while rewarding points, rebounds, assists, steals and blocks. Its numeric value is on each name's tooltip. If required fields are absent, the whole team explicitly falls back to points ranking.
 
-## Local use and verification
+## Local use
 
 ```sh
 python3 -m http.server 8080
@@ -64,18 +64,16 @@ Open http://localhost:8080/ (not `file://`). HTTPS or localhost is needed for se
 Optional developer tools need Node 22+, with no installation step:
 
 ```sh
-npm test
 node scripts/snapshot.mjs
 node scripts/snapshot.mjs 2026-11-09 2026-11-10
 ```
 
-Tests cover captured ESPN schemas, shooting and turnover parsing, Game Score ranking, DNP exclusion, missing fields, clocks/OT, device time zones/DST, standings ties, scoring runs, highlight boundaries, safe rendering, partial failures, fetch concurrency and PWA subpath/offline handling. Browser checks cover phone and desktop layouts and game navigation.
 
 The service-worker cache is versioned. Reload an open page to obtain an update; close/reopen the installed app if an older document remains visible. The revision changes the offline cache and viewed-slate cache version so old notes and old layout settings do not carry over.
 
 ## Files
 
-`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared parsing, ranking, notes and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: tests, collection and deployment. `tests/`: dependency-free tests and small captured fixtures. `data/`: dated fallback snapshots.
+`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared parsing, ranking, notes and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: collection and deployment. `data/`: dated fallback snapshots.
 
 ## References
 

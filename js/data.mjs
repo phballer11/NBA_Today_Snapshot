@@ -78,9 +78,9 @@ export function normalizeScoreboard(raw, date, standings = {}) {
         const t = c.competitors.find(x=>x.homeAway===side); if (!t) throw new Error('Missing team');
         const standing = standings[t.id];
         const seed = numeric(t.curatedRank?.current);
-        return { id:String(t.id), code:t.team.abbreviation, name:t.team.displayName, color:/^[0-9a-f]{6}$/i.test(t.team.color||'') ? `#${t.team.color}` : '#7589ab', score:numeric(t.score), record:t.records?.find(r=>r.type==='total'||r.name==='overall')?.summary || standing?.record || null, rank:standing?.rank ?? (seed>0 && seed<=15 ? seed : null), tied:standing?.tied||false, rankDerived:standing?.derived||false, conference:standing?.conference||'', players:[], ranking:'Game Score' };
+        return { id:String(t.id), code:t.team.abbreviation, name:t.team.displayName, color:/^[0-9a-f]{6}$/i.test(t.team.color||'') ? `#${t.team.color}` : '#7589ab', score:numeric(t.score), periods:(t.linescores||[]).map((line,index)=>({period:numeric(line.period)??index+1,score:numeric(line.value??line.displayValue)})).filter(line=>Number.isInteger(line.period)&&line.period>0), record:t.records?.find(r=>r.type==='total'||r.name==='overall')?.summary || standing?.record || null, rank:standing?.rank ?? (seed>0 && seed<=15 ? seed : null), tied:standing?.tied||false, rankDerived:standing?.derived||false, conference:standing?.conference||'', players:[], ranking:'Game Score' };
       };
-      return {id:String(e.id), start:e.date, state:status.type?.completed ? 'post' : (status.type?.state||'pre'), status:statusText(status), away:team('away'), home:team('home'), notes:[], detailsUpdatedAt:null, detailsError:false, venue:c.venue?.fullName||''};
+      return {id:String(e.id), start:e.date, period:numeric(status.period)??0, state:status.type?.completed ? 'post' : (status.type?.state||'pre'), status:statusText(status), away:team('away'), home:team('home'), notes:[], detailsUpdatedAt:null, detailsError:false, venue:c.venue?.fullName||''};
     }).filter(Boolean)
   };
 }
