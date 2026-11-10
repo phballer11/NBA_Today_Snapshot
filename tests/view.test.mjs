@@ -28,6 +28,11 @@ test('player table includes turnovers, escapes names, and highlights only qualif
     assert.equal(table.includes('class="stat-turnover"'),expected);
   }
   assert.equal((html.match(/class="stat-highlight"/g)||[]).length,3);
+  for(const key of ['reb','ast']) for(const [value,expected] of [[4,''],[5,'stat-secondary'],[9,'stat-secondary'],[10,'stat-highlight'],[null,'']]) {
+    const table=playerTable({code:'A',name:'Team',ranking:'Game Score',players:[{name:'Player',rating:null,jersey:null,[key]:value}]});
+    assert.equal(table.includes('class="stat-secondary"'),expected==='stat-secondary');
+    assert.equal(table.includes('class="stat-highlight"'),expected==='stat-highlight');
+  }
   assert.match(html,/Name &lt;script&gt;/);assert.doesNotMatch(html,/TOP FIVE|<script>/);
 });
 test('device timezone is selected at runtime, including local date changes across midnight',()=>{
