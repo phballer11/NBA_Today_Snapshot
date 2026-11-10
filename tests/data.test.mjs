@@ -28,7 +28,7 @@ test('live, tenths, overtime, halftime, delayed and final clocks',()=>{
  assert.equal(statusText({type:{state:'pre',description:'Postponed'}}),'Postponed');
 });
 test('Auckland calendar and Eastern slate rollover respect DST',()=>{
- assert.equal(dateInZone(new Date('2026-11-09T12:00Z')),'2026-11-10');
+ assert.equal(dateInZone(new Date('2026-11-09T12:00Z'),'Pacific/Auckland'),'2026-11-10');
  assert.equal(nbaDate(new Date('2026-11-10T08:00Z')),'2026-11-09');
  assert.equal(nbaDate(new Date('2026-11-10T11:00Z')),'2026-11-10');
  assert.equal(nbaDate(new Date('2026-07-10T09:59Z')),'2026-07-09');

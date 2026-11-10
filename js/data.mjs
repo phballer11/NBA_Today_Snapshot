@@ -1,7 +1,7 @@
 // Shared by the browser and the optional GitHub Actions snapshot collector.
 export const API = 'https://site.api.espn.com';
-export const ZONE = 'Pacific/Auckland';
-export function dateInZone(now = new Date(), zone = ZONE) {
+export function deviceZone() { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+export function dateInZone(now = new Date(), zone = deviceZone()) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
   return ['year', 'month', 'day'].map(k => parts.find(p => p.type === k).value).join('-');
 }
@@ -106,18 +106,23 @@ export function scoringRun(plays, game) {
   const active=game.state==='in' && last?.side===run.side && last?.points===run.points;
   return `${game[run.side].code} ${active?'on':'had'} ${/^(8|11|18)$/.test(String(run.points))?'an':'a'} ${run.points}–0 run${run.period ? ` · ${run.period>4?'OT'+(run.period-4):'Q'+run.period} ${run.clock||''}` : ''}`;
 }
+export function isHighlightedStat(key, value) {
+  const thresholds = {pts:20, reb:10, ast:10, stl:4, blk:4};
+  return value != null && Number.isFinite(Number(value)) && thresholds[key] !== undefined && Number(value) >= thresholds[key];
+}
 export function makeNotes(game, allPlayers, plays=[]) {
   const notes=[], run=scoringRun(plays, game);
   if(run) notes.push(run);
   const complete=allPlayers.every(p=>p.rating!==null);
   const players=[...allPlayers].sort((a,b)=>complete?b.rating-a.rating:(b.pts??0)-(a.pts??0));
   const first=players.find(p=>[p.pts,p.reb,p.ast,p.stl,p.blk].filter(v=>v>=10).length>=3);
-  if(first) notes.push(`${first.name}: ${first.pts} PTS · ${first.reb} REB · ${first.ast} AST${first.stl>=10?` · ${first.stl} STL`:''}${first.blk>=10?` · ${first.blk} BLK`:''} (triple-double)`);
+  const summary=p=>[['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK']]
+    .filter(([key])=>isHighlightedStat(key,p[key])).map(([key,label])=>`${p[key]} ${label}`).join(' · ');
+  if(first) notes.push(`${first.name}: ${summary(first)} (triple-double)`);
   if(notes.length<2) {
-    const notable=players.find(p=>p.pts>=30||p.reb>=20||p.ast>=15||p.tpm>=7||p.stl>=5||p.blk>=5);
-    if(notable && notable!==first) notes.push(`${notable.name}: ${notable.pts} PTS · ${notable.reb} REB · ${notable.ast} AST${notable.tpm>=7?` · ${notable.tpm} threes`:''}${notable.stl>=5?` · ${notable.stl} STL`:''}${notable.blk>=5?` · ${notable.blk} BLK`:''}`);
+    const notable=players.find(p=>p!==first && ['pts','reb','ast','stl','blk'].some(key=>isHighlightedStat(key,p[key])));
+    if(notable) notes.push(`${notable.name}: ${summary(notable)}`);
   }
-  if(!notes.length && players[0]) notes.push(`${players[0].name} leads by ${complete?'Game Score':'points'} · ${players[0].pts} PTS · ${players[0].reb} REB · ${players[0].ast} AST`);
   return notes.slice(0,2);
 }
 export function applySummary(game, summary) {
