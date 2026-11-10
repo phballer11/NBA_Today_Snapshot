@@ -19,7 +19,7 @@ All asset paths, the PWA manifest and service-worker scope support a GitHub Page
 
 Set repository **Settings → Secrets and variables → Actions → Variables → ENABLE_SNAPSHOTS** to `true` for background data collection and deployment every 15 minutes. Leave it unset to skip scheduled runs. Pushes and manual runs still fetch snapshots.
 
-The open app fetches ESPN directly every 30 seconds while games are live, every two minutes otherwise, and pauses polling while hidden. The setting controls only fallback data. GitHub schedules can be delayed, and Actions usage depends on your plan. Snapshot data is explicitly labeled with its age; Refresh does not trigger a privileged workflow.
+The open app fetches ESPN directly approximately every 30 seconds only while the selected NBA date has a live game, and pauses polling while hidden. There is no automatic polling when all games are scheduled or final. Opening/reloading the app, choosing a date and tapping Refresh still fetch data; tap Refresh or reopen to discover that a scheduled game has started. Returning to the same date or reconnecting does not refresh a non-live slate. Final player boxes may be reused for ten minutes. The setting controls only fallback data. GitHub schedules can be delayed, and Actions usage depends on your plan. Snapshot data is explicitly labeled with its age; Refresh does not trigger a privileged workflow.
 
 The collector captures yesterday/current/next NBA dates, retains up to seven date files, and uses the Actions cache to preserve previous snapshots across feed failures. The site remains fully static; no running backend or CORS proxy is needed.
 
@@ -83,7 +83,7 @@ The service-worker cache is versioned. Reload an open page to obtain an update; 
 
 ## YouTube game highlights (key-free)
 
-Each card ends with direct YouTube links, grouped into **Full game** and **Player highlights**. Every accepted match is shown; links are not limited to the five displayed players. Only FreeDawkins (`@FreeDawkins`), NBA (`@NBA`) and NBA Japan (`@NBAJPN`) are included. There are no embeds, thumbnails, videos downloaded to the site, API keys, logins, cookies, proxy services, or new dependencies.
+Each card ends with direct YouTube links, grouped into **Full game** and **Player highlights**. Every accepted match is shown; links are not limited to the five displayed players. NBA Japan player links show the matched player names in English before the original video title. Only FreeDawkins (`@FreeDawkins`), NBA (`@NBA`) and NBA Japan (`@NBAJPN`) are included. There are no embeds, thumbnails, videos downloaded to the site, API keys, logins, cookies, proxy services, or new dependencies.
 
 The collector runs with the existing GitHub Actions deployment. It tries public channel RSS first and falls back to the public uploads page if RSS is unavailable. It reads only data already included in public HTML, without executing YouTube code or calling its internal APIs. Matching uses two passes:
 
@@ -94,7 +94,7 @@ For both paths, stated final scores and single-player title statistics must agre
 
 This is conservative metadata matching, not verification of the footage itself. Discovery covers the recent videos exposed by the three public pages/feeds and retains previously matched links. It cannot guarantee every related upload or arbitrary historical backfill. Unknown Japanese player aliases may reduce coverage; they must be added explicitly rather than guessed. Initial discovery is for completed games only.
 
-Enable repository variable `ENABLE_HIGHLIGHTS=true` to run the existing 15-minute schedule even when `ENABLE_SNAPSHOTS` is unset. Either variable enables the scheduled job; pushes/manual deployments collect links too. The workflow refreshes score snapshots before highlights and continues deployment if highlight discovery fails. The browser cannot trigger collection: selecting a date reads the already-published JSON immediately, independently of live ESPN score refreshes. It refreshes links at most every five minutes while visible, or on manual Refresh. It retains the last viewed link files offline.
+Enable repository variable `ENABLE_HIGHLIGHTS=true` to run the existing 15-minute schedule even when `ENABLE_SNAPSHOTS` is unset. Either variable enables the scheduled job; pushes/manual deployments collect links too. The workflow refreshes score snapshots before highlights and continues deployment if highlight discovery fails. The browser cannot trigger collection: selecting a date reads the already-published JSON immediately, independently of live ESPN score refreshes. During live-game polling it checks for updated published links at most every five minutes; opening the app, choosing a date or manual Refresh can also load them. No background link polling runs for a non-live slate. It retains the last viewed link files offline.
 
 Run locally after collecting score snapshots:
 
