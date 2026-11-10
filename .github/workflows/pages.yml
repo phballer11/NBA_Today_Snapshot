@@ -1,0 +1,58 @@
+name: Verify, snapshot and deploy Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Optional fallback refresh. Live browsers poll ESPN directly every 30s.
+    - cron: '7,22,37,52 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name != 'schedule' || vars.ENABLE_SNAPSHOTS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify behavior
+        run: npm test
+      - name: Restore last successful fallback data
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: nba-snapshots-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: nba-snapshots-
+      - name: Fetch static JSON snapshots
+        id: snapshot
+        continue-on-error: true
+        run: node scripts/snapshot.mjs
+      - name: Report feed failure
+        if: steps.snapshot.outcome == 'failure'
+        run: echo '::warning::ESPN snapshot collection failed. Previously saved data is retained; browser live fetching remains enabled.'
+      - name: Stage only public website files
+        run: |
+          mkdir -p _site
+          cp index.html styles.css sw.js manifest.webmanifest _site/
+          cp -R js icons data _site/
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

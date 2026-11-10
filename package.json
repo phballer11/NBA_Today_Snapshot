@@ -1,0 +1,5 @@
+{
+  "name": "nba-quick-glance", "version": "1.0.0", "private": true, "type": "module",
+  "scripts": { "test": "node --test", "snapshot": "node scripts/snapshot.mjs", "serve": "python3 -m http.server 8080" },
+  "engines": { "node": ">=22" }
+}
