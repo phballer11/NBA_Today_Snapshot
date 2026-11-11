@@ -21,6 +21,52 @@ const PLAYER_ALIASES={
  'Giannis Antetokounmpo':['Giannis','ヤニスアデトクンボ'],'Kevin Durant':['ケビンデュラント'],
  'Jayson Tatum':['ジェイソンテイタム'],'Jalen Brunson':['ジェイレンブランソン']
 };
+// Curated, established names only. These identify athletes, never their current team.
+const COMMON_PLAYER_ALIASES={
+ 'Victor Wembanyama':['Wemby'],
+ 'Shai Gilgeous-Alexander':['SGA','Shai'],
+ 'Nikola Jokic':['Joker','The Joker','Big Honey'],
+ 'Giannis Antetokounmpo':['Greek Freak','The Greek Freak'],
+ 'Kevin Durant':['KD','Slim Reaper','Durantula','Easy Money Sniper'],
+ 'Anthony Davis':['AD','The Brow'],
+ 'LeBron James':['King James','LBJ','Bron'],
+ 'Stephen Curry':['Chef Curry','Baby Faced Assassin'],
+ 'Kyrie Irving':['Uncle Drew','Kyrie'],
+ 'Damian Lillard':['Dame','Dame Dolla','Dame Time'],
+ 'Anthony Edwards':['Ant','Ant-Man','Ant Man'],
+ 'Anfernee Simons':['Ant'],
+ 'Karl-Anthony Towns':['KAT'],
+ 'Donovan Mitchell':['Spida'],
+ 'Devin Booker':['Book','DBook','D Book'],
+ 'Ja Morant':['Ja'],
+ 'Joel Embiid':['The Process','JoJo'],
+ 'Jimmy Butler':['Jimmy Buckets'],
+ 'Paul George':['PG','PG13'],
+ 'Chris Paul':['CP3'],
+ 'James Harden':['The Beard'],
+ 'Russell Westbrook':['Russ','Brodie'],
+ 'Bam Adebayo':['Bam'],
+ 'Kristaps Porzingis':['KP','Porzingod'],
+ 'Domantas Sabonis':['Domas'],
+ 'Alperen Sengun':['Sengun','Alpi'],
+ 'Jaren Jackson Jr.':['JJJ'],
+ 'Jalen Williams':['JDub','J Dub'],
+ 'D Angelo Russell':['DLo','D Lo'],
+ 'Austin Reaves':['AR15'],
+ 'CJ McCollum':['CJ'],
+ 'OG Anunoby':['OG'],
+ 'Kentavious Caldwell-Pope':['KCP'],
+ 'Nickeil Alexander-Walker':['NAW'],
+ 'Immanuel Quickley':['IQ'],
+ 'Kyle Anderson':['SloMo','Slow Mo'],
+ 'Norman Powell':['Norm'],
+ 'Cameron Johnson':['Cam Johnson'],
+ 'Cameron Thomas':['Cam Thomas'],
+ 'Herbert Jones':['Herb Jones']
+};
+for(const [name,aliases]of Object.entries(COMMON_PLAYER_ALIASES))PLAYER_ALIASES[name]=[...(PLAYER_ALIASES[name]||[]),...aliases];
+const TEAM_ALIASES={CLE:['Cavs'],DAL:['Mavs'],DEN:['Nugs'],GS:['Dubs'],LAC:['Clips'],MEM:['Grizz'],MIN:['Wolves','T-Wolves','T Wolves','TWolves'],NO:['Pels'],PHI:['Sixers','Seventy Sixers','Seventy-Sixers'],POR:['Blazers','Trailblazers','Rip City'],BOS:['Celts'],TOR:['Raps'],SAC:['Beam Team','Sactown']};
+const EXTRA_TEAM_CODES={GS:['GSW'],NO:['NOP'],NY:['NYK'],SA:['SAS'],UTAH:['UTA'],WSH:['WAS'],PHX:['PHO'],BKN:['BRK'],CHA:['CHO']};
 const norm=s=>String(s||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 const decode=s=>String(s||'').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&#(x[\da-f]+|\d+);/gi,(_,n)=>String.fromCodePoint(n[0].toLowerCase()==='x'?parseInt(n.slice(1),16):Number(n))).replace(/&(amp|lt|gt|quot|apos);/g,(_,e)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"}[e]));
 const json=async(url,fallback=null)=>{try{return JSON.parse(await readFile(url,'utf8'));}catch{return fallback;}};
@@ -82,7 +128,7 @@ const mentions=(text,alias)=>/[\u3000-\u9fff]/u.test(alias)?norm(text).includes(
 function teamMention(text,team,cities=false){
  const n=norm(text),name=team.name||'',nickname=name.split(' ').slice(name.endsWith('Trail Blazers')?-2:-1).join(' ');
  const words=s=>String(s).normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim(),english=` ${words(text)} `;
- return [name,nickname,...(cities?CITY_ALIASES[team.code]||[]:[]),...(team.code==='POR'?['Trailblazers']:[]),...(team.code==='PHI'?['Sixers','76ers']:[])].filter(Boolean).some(alias=>english.includes(` ${words(alias)} `))||[JP_TEAMS[team.code],...(team.code==='PHI'?['シクサーズ']:[])].filter(Boolean).some(alias=>n.includes(norm(alias)));
+ return [name,nickname,...(TEAM_ALIASES[team.code]||[]).filter(alias=>alias!=='Clips'||/\b(?:vs\.?|versus|at|against|beat|defeat(?:ed)?)\s+(?:the\s+)?Clips\b|\bClips\s+(?:at|vs\.?|versus)\b/i.test(text)),...(cities?CITY_ALIASES[team.code]||[]:[]),...(team.code==='POR'?['Trailblazers']:[]),...(team.code==='PHI'?['Sixers','76ers']:[])].filter(Boolean).some(alias=>english.includes(` ${words(alias)} `))||[...(team.code?.length>=3?[team.code]:[]),...(EXTRA_TEAM_CODES[team.code]||[])].some(code=>initialismMention(text,code))||[JP_TEAMS[team.code],...(team.code==='PHI'?['シクサーズ']:[])].filter(Boolean).some(alias=>n.includes(norm(alias)));
 }
 function conflictingOpponent(text,title,game){
  const current=[JP_TEAMS[game.away.code],JP_TEAMS[game.home.code]];
@@ -90,18 +136,43 @@ function conflictingOpponent(text,title,game){
  return Object.entries(TEAM_NAMES).some(([code,name])=>!current.includes(JP_TEAMS[code])&&opponents.some(part=>teamMention(part,{code,name})));
 }
 // Short names must be unambiguous across all available rosters, not just one game.
-let playerDirectory=[];
+let playerDirectory=[],playerAliasCache=new Map();
 function playerAliases(player){
+ if(playerAliasCache.has(player.id))return playerAliasCache.get(player.id);
  const canonical=player.name.replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i,'');
- const aliases=[player.name,canonical,...Object.entries(PLAYER_ALIASES).filter(([name])=>norm(name)===norm(player.name)).flatMap(([,names])=>names)];
+ const aliases=[player.name,canonical,...Object.entries(PLAYER_ALIASES).filter(([name])=>norm(name)===norm(player.name)||norm(name.replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i,''))===norm(canonical)).flatMap(([,names])=>names)];
  const surname=canonical.split(' ').at(-1);
  if(surname.length>=4&&!/^(?:black|white|green|brown|young|love|king|ball|smart|little|mann|brooks|jones)$/i.test(surname)){
   const ids=new Set(playerDirectory.filter(p=>p.name.replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i,'').split(' ').at(-1).toLowerCase()===surname.toLowerCase()).map(p=>p.id));
   if(ids.size===1)aliases.push(surname);
  }
- return [...new Set(aliases)];
+ const unique=[...new Set(aliases)];playerAliasCache.set(player.id,unique);return unique;
 }
-function namedPlayers(text,game){return game.roster.filter(p=>playerAliases(p).some(alias=>mentions(text,alias)));}
+// Initialisms are case-sensitive: AD/PG/IQ must not match ordinary words ad/pg/iq.
+function initialismMention(text,alias){
+ const pattern=alias.split('').map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\.?');
+ return new RegExp(`(?<![\\p{L}\\p{N}])${pattern}\\.?(?![\\p{L}\\p{N}])`,'u').test(text);
+}
+function playerAliasMention(text,alias){
+ if(/^[A-Z0-9]{2,5}$/.test(alias))return initialismMention(text,alias);
+ if(/^(?:Ant|Book|Ja|Bam|Norm|Bron|Russ)$/i.test(alias)){
+  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${alias}|${alias.toUpperCase()})(?![\\p{L}\\p{N}])`,'u').test(text);
+ }
+ return mentions(text,alias);
+}
+function namedPlayers(text,game){
+ return game.roster.filter(p=>playerAliases(p).some(alias=>{
+  if(!playerAliasMention(text,alias))return false;
+  if(alias==='Ant'){
+   // Both Edwards and Simons use Ant: require a unique explicit team context.
+   const owners=playerDirectory.filter(other=>['Anthony Edwards','Anfernee Simons'].includes(other.name));
+   const teams=[game.away,game.home];
+   const identified=owners.filter(owner=>teams.some(team=>team.id===owner.teamId&&teamMention(text,team,true)));
+   return identified.length===1&&identified[0].id===p.id;
+  }
+  return true;
+ }));
+}
 const MONTHS='january february march april may june july august september october november december'.split(' ');
 function datesIn(text,year){
  const found=[];let m;
