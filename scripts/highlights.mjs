@@ -123,17 +123,17 @@ function pointScope(title){
  const streak=/\b(?:straight|consecutive|unanswered)\s+(?:PTS|points)/i.test(title);
  return {period,streak,unanswered:/\bunanswered\b/i.test(title)};
 }
-function scopedPoints(game,player,scope){
+function scopedPoints(game,player,scope,target){
  if(!scope.period&&!scope.streak)return player.pts;
  if(!game.plays?.length)return null;
  const plays=game.plays.filter(p=>(!scope.period||p.period?.number===scope.period)&&p.scoringPlay&&p.scoreValue>0).sort((a,b)=>Number(a.sequenceNumber)-Number(b.sequenceNumber));
- let total=0,run=0,best=0;
+ let total=0,run=0,best=0,found=false,ends=new Set();
  for(const play of plays){
   const scorer=play.participants?.[0]?.athlete?.id;
-  if(scorer===player.id){total+=play.scoreValue;run+=play.scoreValue;best=Math.max(best,run);}
-  else if(scope.unanswered||play.team?.id===player.teamId)run=0;
+  if(scorer===player.id){total+=play.scoreValue;run+=play.scoreValue;best=Math.max(best,run);ends=new Set([play.scoreValue,...[...ends].map(n=>n+play.scoreValue)]);if(ends.has(target))found=true;}
+  else if(scope.unanswered||play.team?.id===player.teamId){run=0;ends.clear();}
  }
- return scope.streak?best:total;
+ return scope.streak?(target===undefined?best:found?target:null):total;
 }
 function claimedStats(title,players,game){
  const scope=pointScope(title),claims=[];
@@ -144,10 +144,11 @@ function claimedStats(title,players,game){
   for(const m of title.matchAll(pattern)){
    if(players.length>1&&!collective)return null;
    if((scope.period||scope.streak)&&key!=='pts')return null;
-   const values=players.map(p=>key==='pts'?scopedPoints(game,p,scope):p[key]);
+   const value=+m[1],atLeast=!!m[2];
+   const values=players.map(p=>key==='pts'?scopedPoints(game,p,scope,scope.streak&&!atLeast?value:undefined):p[key]);
    if(values.some(v=>!Number.isFinite(v)))return null;
-   const actual=values.reduce((a,b)=>a+b,0),value=+m[1],atLeast=!!m[2];
-   if(atLeast?actual<value:scope.streak?actual<value:actual!==value)return null;
+   const actual=values.reduce((a,b)=>a+b,0);
+   if(atLeast?actual<value:actual!==value)return null;
    claims.push({stat:key,value,atLeast,actual,scope:scope.streak?(scope.unanswered?'unanswered-run':'consecutive-team-points'):scope.period?'period':'game',...(scope.period?{period:scope.period}:{}),...(collective?{combinedPlayerIds:players.map(p=>p.id)}:{})});
   }
  }
