@@ -35,6 +35,8 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 - Stat highlights use number colour only, with no background: Strong performances use bold bright lime: PTS ≥20; REB/AST ≥10; STL/BLK ≥4. PTS from 10–19 and REB/AST from 5–9 use leaf green to signal rising performance, with less brightness and weight than the lime tier. TO ≥5 is highlighted in red, also without a background. Other values retain normal styling. Missing values show `—`.
 - One or two notes drawn from matching player thresholds, triple-doubles or supported scoring runs. Notes are computed from feed data, not editorial news. Scoring runs use ordered score changes; corrected play-by-play suppresses run detection.
 - No footer logo, slogan or website explanation. Data/ranking details are documented here rather than taking space on the scoreboard.
+- Score and highlight refreshes preserve the visible game/player row, keyboard focus and horizontal table/navigation position. Games keep their order while viewing the same date.
+- A non-blocking “Game stat updated.” toast appears at the top right for three seconds after a successful score refresh.
 - Loading skeletons, score-first rendering, manual refresh, last-fetch age, stale/empty/error states, reduced-motion support, accessible tables and keyboard navigation.
 - Latest five viewed slates cached for seven days; offline shell and bounded snapshot cache. Saved in-progress games say **LAST SEEN**. The clock is observed feed data; it is never advanced by an invented countdown.
 
