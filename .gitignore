@@ -6,3 +6,5 @@ work/
 
 # Collector metadata is cached by Actions, not published or committed.
 data/highlights/catalog.json
+
+data/.collection-success.json
