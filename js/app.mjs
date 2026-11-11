@@ -4,6 +4,7 @@ import {highlightSection,validHighlights,updateHighlightFreshness} from './highl
 const $=s=>document.querySelector(s);
 const store={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{/* Private mode/quota: network path remains usable. */}}};
 const prefix='nba-today-snapshot-v2:';
+const SCORE_REFRESH_MS=60000;
 let toastTimer=null;
 function showUpdatedToast(){
   clearTimeout(toastTimer);
@@ -105,7 +106,7 @@ function render(){
 }
 function hasLiveGames(){return slate?.date===selected&&slate.games.some(g=>g.state==='in');}
 function stopPolling(){clearTimeout(timer);timer=null;}
-function schedule(){stopPolling();if(document.hidden||!hasLiveGames())return;timer=setTimeout(()=>refresh(false),30000);}
+function schedule(){stopPolling();if(document.hidden||!hasLiveGames())return;timer=setTimeout(()=>refresh(false),SCORE_REFRESH_MS);}
 async function refresh(manual=false){if(refreshing)return;refreshing=true;const token=++generation,date=selected;$('#refresh').disabled=true;$('#refresh').setAttribute('aria-label','Refreshing scores');let gotNetwork=false;loadHighlights(date,manual);
 try{const result=await loadSlate(date,{previous:slate,onProgress:data=>{if(token!==generation)return;gotNetwork=true;slate=data;source='ESPN';problem='';render();}});if(token!==generation)return;slate=result;source='ESPN';problem=result.games.some(g=>g.detailsError)?'Some player stats are delayed. Scores are available; saved stats are marked.':result.standingsUnavailable?'Conference positions are temporarily unavailable.':'';save(result);render();showUpdatedToast();}
 catch{if(token!==generation)return;if(!gotNetwork){let snapshot=null;try{const raw=await getJSON(new URL(`../data/${date}.json`,import.meta.url),{timeout:6000});if(raw.schema===1&&raw.date===date&&Array.isArray(raw.games)&&Number.isFinite(Date.parse(raw.updatedAt)))snapshot=raw;}catch{/* Try last viewed data. */}const saved=cached(date);slate=[snapshot,saved].filter(Boolean).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0]||null;source=slate===snapshot&&snapshot?'Snapshot':'Saved';}
@@ -119,6 +120,6 @@ $('#game-nav').addEventListener('click',event=>{
   const target=document.getElementById(link.getAttribute('href').slice(1));
   if(target){event.preventDefault();target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});target.focus({preventScroll:true});}
 });
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPolling();else{if(followingLatest&&selected!==nbaDate()){changeDate(nbaDate());return;}updateHeader();if(!slate||hasLiveGames()&&Date.now()-Date.parse(slate.updatedAt)>25000)refresh();else schedule();}});window.addEventListener('online',()=>{if(!document.hidden&&(!slate||hasLiveGames()))refresh();else if(slate){problem='';render();}});window.addEventListener('offline',()=>{problem='Offline. Scores and clocks show their last observed values.';render();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPolling();else{if(followingLatest&&selected!==nbaDate()){changeDate(nbaDate());return;}updateHeader();if(!slate||hasLiveGames()&&Date.now()-Date.parse(slate.updatedAt)>=SCORE_REFRESH_MS)refresh();else schedule();}});window.addEventListener('online',()=>{if(!document.hidden&&(!slate||hasLiveGames()))refresh();else if(slate){problem='';render();}});window.addEventListener('offline',()=>{problem='Offline. Scores and clocks show their last observed values.';render();});
 setInterval(updateHeader,15000);updateHeader();slate=cached(selected);if(slate){source='Saved';render();}refresh();
 if('serviceWorker'in navigator)navigator.serviceWorker.register(new URL('../sw.js',import.meta.url),{scope:new URL('../',import.meta.url).pathname}).catch(()=>{/* Normal browser fetching still works. */});
