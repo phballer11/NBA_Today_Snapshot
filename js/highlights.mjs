@@ -9,7 +9,6 @@ export function validHighlights(raw,date){
  }
  return {...raw,games};
 }
-const WORKFLOW='https://github.com/phballer11/NBA_Today_Snapshot/actions/workflows/pages.yml';
 function freshnessInfo(checkedAt){
  const ago=checkedAt?Math.max(0,Math.floor((Date.now()-Date.parse(checkedAt))/60000)):null;
  const elapsed=ago===null?'':ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.floor(ago/60)}h ago`:`${Math.floor(ago/1440)}d ago`;
@@ -20,7 +19,6 @@ export function updateHighlightFreshness(){
   const info=freshnessInfo(el.dataset.highlightChecked);
   el.querySelector('.highlight-age').textContent=info.text;
   el.classList.toggle('is-stale',info.stale);
-  el.querySelector('.collect-videos').hidden=!info.stale;
  }
 }
 export function highlightSection(game,document,loading=false){
@@ -31,5 +29,5 @@ export function highlightSection(game,document,loading=false){
  };
  const freshness=freshnessInfo(document?.checkedAt);
  const empty=game.state==='pre'?'Highlights appear after the game.':loading?'Checking saved highlight links…':document?.sources?.length && document.sources.every(source=>!source.ok)?'Video lookup is temporarily unavailable.':document?'No game-matched videos found yet.':'Highlight links have not been collected for this date yet.';
- return `<section class="highlights" aria-label="YouTube highlights for ${esc(game.away.code)} at ${esc(game.home.code)}"><div class="highlights-heading" data-view-key="highlights"><h3>YouTube highlights</h3>${links.length?`<span>${links.length} ${links.length===1?'video':'videos'}</span>`:''}</div>${full.length?`<h4>Full game</h4><div class="video-list">${full.map(link).join('')}</div>`:''}${players.length?`<h4>Player highlights</h4><div class="video-list">${players.map(link).join('')}</div>`:''}${!links.length?`<p class="highlights-empty">${empty}</p>`:''}<div class="highlights-freshness ${freshness.stale?'is-stale':''}" data-highlight-checked="${esc(document?.checkedAt||'')}"><span class="highlight-age">${freshness.text}</span>${document?.lookupPartial?'<span> · Some lookups unavailable; saved matches retained.</span>':''}<a class="collect-videos" href="${WORKFLOW}" target="_blank" rel="noopener noreferrer"${freshness.stale?'':' hidden'} aria-label="Open GitHub Actions to collect video links; repository access required">Collect video links on GitHub ↗</a></div></section>`;
+ return `<section class="highlights" aria-label="YouTube highlights for ${esc(game.away.code)} at ${esc(game.home.code)}"><div class="highlights-heading" data-view-key="highlights"><h3>YouTube highlights</h3>${links.length?`<span>${links.length} ${links.length===1?'video':'videos'}</span>`:''}</div>${full.length?`<h4>Full game</h4><div class="video-list">${full.map(link).join('')}</div>`:''}${players.length?`<h4>Player highlights</h4><div class="video-list">${players.map(link).join('')}</div>`:''}${!links.length?`<p class="highlights-empty">${empty}</p>`:''}<div class="highlights-freshness ${freshness.stale?'is-stale':''}" data-highlight-checked="${esc(document?.checkedAt||'')}"><span class="highlight-age">${freshness.text}</span>${document?.lookupPartial?'<span> · Some lookups unavailable; saved matches retained.</span>':''}</div></section>`;
 }
