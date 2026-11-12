@@ -1,0 +1,74 @@
+name: Watch completed games
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37,52 11 * * *'
+      timezone: Pacific/Auckland
+    - cron: '7,22,37,52 12-21 * * *'
+      timezone: Pacific/Auckland
+permissions:
+  contents: read
+concurrency:
+  group: video-game-watcher
+  cancel-in-progress: false
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      start: ${{ steps.window.outputs.start }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: window
+        env:
+          WATCH_ENABLED: ${{ vars.ENABLE_HIGHLIGHTS == 'true' || vars.ENABLE_SNAPSHOTS == 'true' }}
+        run: node scripts/watch-games.mjs gate
+  afternoon:
+    needs: gate
+    if: needs.gate.outputs.start == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Watch until 5 PM Auckland
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WATCH_UNTIL: '1020'
+        run: node scripts/watch-games.mjs run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: watcher-state
+          path: /tmp/nba-watcher-state.json
+          if-no-files-found: ignore
+          retention-days: 2
+  evening:
+    needs: [gate, afternoon]
+    if: always() && needs.gate.outputs.start == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 315
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: watcher-state
+          path: /tmp
+      - name: Watch until 10 PM Auckland
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WATCH_UNTIL: '1320'
+          WATCH_MAX_MINUTES: '300'
+        run: node scripts/watch-games.mjs run

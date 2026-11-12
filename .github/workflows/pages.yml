@@ -3,9 +3,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    # More opportunities to run; GitHub may delay/drop scheduled triggers.
-    - cron: '7,17,27,37,47,57 * * * *'
+    inputs:
+      watcher_batch:
+        description: Internal watcher game batch (leave empty for manual collection)
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -13,7 +16,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event_name != 'schedule' || vars.ENABLE_SNAPSHOTS == 'true' || vars.ENABLE_HIGHLIGHTS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
@@ -34,11 +36,7 @@ jobs:
           path: data
           key: nba-snapshots-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: nba-snapshots-
-      - name: Check collection freshness
-        id: freshness
-        run: node scripts/collection-policy.mjs
       - name: Fetch static JSON snapshots
-        if: steps.freshness.outputs.collect == 'true'
         id: snapshot
         continue-on-error: true
         run: bash scripts/collect-with-retry.sh snapshot
@@ -46,31 +44,28 @@ jobs:
         if: steps.snapshot.outcome == 'failure'
         run: echo '::warning::ESPN snapshot collection failed. Previously saved data is retained; browser live fetching remains enabled.'
       - name: Collect game-matched YouTube links
-        if: steps.freshness.outputs.collect == 'true'
         id: highlights
         continue-on-error: true
         run: bash scripts/collect-with-retry.sh highlights
       - name: Report highlight lookup failure
         if: steps.highlights.outcome == 'failure'
         run: echo '::warning::Highlight discovery unavailable. Previously matched links are retained; scores can still deploy.'
+      - name: Record successful collection
+        if: steps.snapshot.outcome == 'success' && steps.highlights.outcome == 'success'
+        env:
+          WATCHER_BATCH: ${{ inputs.watcher_batch }}
+        run: node scripts/collection-receipt.mjs
       - name: Stage only public website files
-        if: steps.freshness.outputs.collect == 'true'
         run: |
           mkdir -p _site
-          cp index.html styles.css sw.js manifest.webmanifest _site/
+          cp index.html admin.html styles.css sw.js manifest.webmanifest _site/
           cp -R js icons data _site/
           rm -f _site/data/highlights/catalog.json _site/data/.collection-success.json
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
-        if: steps.freshness.outputs.collect == 'true'
       - uses: actions/upload-pages-artifact@v4
-        if: steps.freshness.outputs.collect == 'true'
         with:
           path: _site
       - name: Deploy GitHub Pages
-        if: steps.freshness.outputs.collect == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Record successful collection and deployment
-        if: steps.deployment.outcome == 'success' && steps.snapshot.outcome == 'success' && steps.highlights.outcome == 'success'
-        run: node scripts/collection-policy.mjs mark
