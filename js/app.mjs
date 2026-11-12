@@ -86,7 +86,7 @@ function render(){
   $('#game-nav').innerHTML=list.map(g=>`<a data-game-link href="#game-${esc(g.id)}" class="game-jump ${g.state==='in'?'jump-live':''}" aria-label="Jump to ${esc(g.away.name)} at ${esc(g.home.name)}">${g.state==='in'?'<i class="live-dot" aria-hidden="true"></i>':''}<span>${esc(g.away.code)} <span class="jump-at">at</span> ${esc(g.home.code)}</span></a>`).join('');
   const shared=$('#daily-highlights'),sharedHTML=sharedHighlights(highlightDocs.get(selected));
   if(shared.innerHTML!==sharedHTML)shared.innerHTML=sharedHTML;shared.hidden=!sharedHTML;
-  if(sharedHTML)$('#game-nav').insertAdjacentHTML('beforeend','<a data-game-link href="#daily-highlights" class="game-jump">Highlights</a>');
+  if(sharedHTML)$('#game-nav').insertAdjacentHTML('beforeend','<a data-game-link href="#daily-highlights" class="game-jump">Other Highlights</a>');
   const games=$('#games');
   if(view&&list.length&&games.querySelector('.game')){
     const wanted=new Set(list.map(g=>'game-'+g.id));
