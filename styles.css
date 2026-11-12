@@ -180,3 +180,6 @@ input[type=date] { background:transparent; color:var(--text); border:0; font-siz
 .highlights-freshness,.highlights-empty { margin:10px 0 0; font-size:10px; color:var(--muted); line-height:1.6; }
 
 .highlights-freshness.is-stale .highlight-age { color:#f3bd72; }
+
+.daily-highlights { margin-top:16px; }
+.daily-highlights[hidden] { display:none; }

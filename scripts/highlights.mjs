@@ -1,5 +1,6 @@
 // Key-free, build-time discovery. Merge public YouTube RSS, uploads and cached metadata.
 // No login, internal API, cookie, proxy, downloaded video, or external dependency.
+import {uploadFits} from '../js/video-window.mjs';
 import {readFile,writeFile,rename,mkdir,readdir,unlink} from 'node:fs/promises';
 import {dateInZone,nbaDate,shiftDate,mapLimit,parsePlayers,getJSON,API} from '../js/data.mjs';
 const ROOT=new URL('../data/',import.meta.url),OUT=new URL('highlights/',ROOT);
@@ -178,8 +179,7 @@ function namedPlayers(text,game){
 function relaxedMatch(video,game){
  const channel=CHANNELS.find(c=>c.id===video.channelId),start=Date.parse(game.start);
  if(!channel||!['in','post'].includes(game.state)||!Number.isFinite(start)||start>Date.now())return null;
- const earliest=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest);
- if(!Number.isFinite(earliest)||!Number.isFinite(latest)||latest<earliest||latest<start||earliest>start+15*3600000)return null;
+ if(!uploadFits(video,game.start,game.date))return null;
  const description=(video.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200),text=video.title+'\n'+description;
  const players=namedPlayers(text,game),teams=[game.away,game.home].filter(team=>teamMention(text,team,true));
  if(!players.length&&!teams.length)return null;
@@ -187,8 +187,8 @@ function relaxedMatch(video,game){
 }
 async function inspect(candidate){
  const html=await publicText(`https://www.youtube.com/watch?v=${candidate.id}`),raw=assignedJSON(html,'ytInitialPlayerResponse'),v=raw.videoDetails,m=raw.microformat?.playerMicroformatRenderer;
- if(v?.videoId!==candidate.id||v.channelId!==candidate.channelId||!v.title||!m?.publishDate)throw new Error(`Watch metadata unavailable (${raw.playabilityStatus?.status||'missing details'})`);
- return {id:candidate.id,title:v.title,channelId:v.channelId,description:v.shortDescription||'',publishedAt:m.publishDate,metadataSource:'watch-page',checkedAt:new Date().toISOString()};
+ if(v?.videoId!==candidate.id||v.channelId!==candidate.channelId||!v.title||!(m?.publishDate||m?.uploadDate))throw new Error(`Watch metadata unavailable (${raw.playabilityStatus?.status||'missing details'})`);
+ return {id:candidate.id,title:v.title,channelId:v.channelId,description:v.shortDescription||'',publishedAt:[m.publishDate,m.uploadDate].find(value=>typeof value==='string'&&/T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/.test(value))||null,uploadedAt:m.uploadDate||null,metadataSource:'watch-page',checkedAt:new Date().toISOString()};
 }
 await mkdir(OUT,{recursive:true});
 const supplied=process.argv.slice(2);if(supplied.some(d=>!/^\d{4}-\d{2}-\d{2}$/.test(d)))throw new Error('Dates must be YYYY-MM-DD');
@@ -205,7 +205,15 @@ await mapLimit(CHANNELS,3,async channel=>{
  try{const result=await discover(channel);sources.push({channel:channel.name,ok:true,method:result.method,count:result.videos.length,unavailable:result.unavailable,coverage:result.coverage});for(const v of result.videos)candidates.set(v.id,v);}
  catch(e){sources.push({channel:channel.name,ok:false,error:e.message});}
 });
-const docs=new Map();for(const slate of slates){const old=await json(new URL(`${slate.date}.json`,OUT),{});docs.set(slate.date,{schema:1,date:slate.date,checkedAt:new Date().toISOString(),sources,games:old.games||{}});}
+// Revalidate every archived link; never retain a stale wrong-card association blindly.
+const docs=new Map();
+for(const slate of slates){
+ const old=await json(new URL(`${slate.date}.json`,OUT),{});
+ for(const link of [...Object.values(old.games||{}).flat(),...(old.highlights||[])]){
+  if(!catalog.videos[link.id]||!catalog.videos[link.id].publishedAt&&link.publishedAt)catalog.videos[link.id]={...link,description:(link.players||[]).map(p=>p.name).join(' ')};
+ }
+ docs.set(slate.date,{schema:3,date:slate.date,checkedAt:new Date().toISOString(),sources,games:{},highlights:[]});
+}
 let inspected=0,accepted=0,failed=0,fallbacks=0;const lookupErrors=new Map();
 const pending=[...candidates.values()].filter(v=>{
  const text=v.title+'\n'+(v.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200);
@@ -213,6 +221,8 @@ const pending=[...candidates.values()].filter(v=>{
 });
 await mapLimit(pending,3,async candidate=>{
  let video=catalog.videos[candidate.id];
+ // Exact RSS timestamps replace rounded cached ages immediately, not after six hours.
+ if(candidate.publishedAt&&/T\d{2}:\d{2}/.test(candidate.publishedAt)&&!video?.publishedAt){video={...candidate,checkedAt:new Date().toISOString()};catalog.videos[candidate.id]=video;}
  try{
   if(!video||video.title!==candidate.title||Date.now()-Date.parse(video.checkedAt)>6*3600000){video=await inspect(candidate);catalog.videos[video.id]=video;inspected++;}
  }catch(error){
@@ -226,26 +236,22 @@ await mapLimit(pending,3,async candidate=>{
 });
 // Match the recent catalog as well as this run's discoveries so an RSS-window change
 // or temporarily unavailable watch page does not discard previously checked metadata.
-const videos=Object.values(catalog.videos).filter(v=>CHANNELS.some(c=>c.id===v.channelId)),matches=new Map();
-for(const video of videos)for(const game of games){
- const link=relaxedMatch(video,game);
- if(link)matches.set(`${video.id}:${game.date}:${game.id}`,{game,link});
+const videos=Object.values(catalog.videos).filter(v=>CHANNELS.some(c=>c.id===v.channelId));
+for(const video of videos){
+ const hits=games.map(game=>({game,link:relaxedMatch(video,game)})).filter(h=>h.link);
+ if(hits.length>1){
+  for(const date of new Set(hits.map(h=>h.game.date))){
+   const local=hits.filter(h=>h.game.date===date),link=local[0].link;
+   docs.get(date).highlights.push({...link,players:[...new Map(hits.flatMap(h=>h.link.players).map(p=>[p.id,p])).values()],matchedGameIds:local.map(h=>h.game.id)});
+  }
+ }else if(hits.length===1){const {game,link}=hits[0];const doc=docs.get(game.date);(doc.games[game.id]||=[]).push(link);}
+ accepted+=hits.length;
 }
-for(const {game,link}of matches.values()){const doc=docs.get(game.date),prior=doc.games[game.id]||[];doc.games[game.id]=[...prior.filter(v=>v.id!==link.id),link];accepted++;}
+const sort=(a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt||a.publicationWindow?.latest)-Date.parse(b.publishedAt||b.publicationWindow?.latest);
 for(const [date,doc]of docs){
- for(const id of Object.keys(doc.games)){
-  const game=games.find(g=>g.id===id&&g.date===date);if(!game){delete doc.games[id];continue;}
-  doc.games[id]=doc.games[id].filter(link=>{
-   const validSaved=link.gameDate===date&&CHANNELS.some(c=>c.id===link.channelId)&&/^[\w-]{11}$/.test(link.id);
-   if(!validSaved)return false;
-   if(!catalog.videos[link.id]||matches.has(`${link.id}:${date}:${id}`))return true;
-   // A failed full-roster lookup leaves only the displayed five. Keep previously
-   // verified links for other athletes until their roster can be checked again.
-   return game.rosterPartial&&link.type==='player'&&link.players?.some(p=>!game.roster.some(r=>r.id===p.id));
-  }).sort((a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt||a.publicationWindow?.latest)-Date.parse(b.publishedAt||b.publicationWindow?.latest));
- }
+ for(const links of Object.values(doc.games))links.sort(sort);doc.highlights.sort(sort);
  doc.lookupPartial=sources.some(s=>!s.ok)||failed>0||games.some(g=>g.date===date&&g.rosterPartial);await atomic(new URL(`${date}.json`,OUT),doc);
- console.log(`${date}: ${Object.values(doc.games).flat().length} game-matched YouTube links`);
+ console.log(`${date}: ${Object.values(doc.games).flat().length} card links; ${doc.highlights.length} shared Highlights`);
 }
 // Keep a bounded recent metadata catalog; dated matched links form the public archive.
 const cutoff=Date.now()-30*86400000;

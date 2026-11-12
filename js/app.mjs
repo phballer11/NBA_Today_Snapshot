@@ -1,6 +1,6 @@
 import {deviceZone,nbaDate,dateInZone,shiftDate,loadSlate,getJSON} from './data.mjs';
 import {esc,time,shortDate,zoneLabel,playerTable,quarterTable} from './view.mjs';
-import {highlightSection,validHighlights,updateHighlightFreshness} from './highlights.mjs';
+import {highlightSection,sharedHighlights,validHighlights,updateHighlightFreshness} from './highlights.mjs';
 const $=s=>document.querySelector(s);
 const store={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{/* Private mode/quota: network path remains usable. */}}};
 const prefix='nba-today-snapshot-v2:';
@@ -57,7 +57,7 @@ function captureView(){
   if(games.dataset.date!==selected)return null;
   if(scrollY===0)return {x:scrollX,y:0};
   const top=document.querySelector('.toolbar').getBoundingClientRect().bottom;
-  const anchor=[...games.querySelectorAll('[data-view-key]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=top&&r.top<innerHeight&&r.height>0;});
+  const anchor=[...document.querySelectorAll('#games [data-view-key], #daily-highlights [data-view-key]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=top&&r.top<innerHeight&&r.height>0;});
   const card=anchor?.closest('.game')||[...games.querySelectorAll('.game')].find(el=>el.getBoundingClientRect().bottom>top);
   return {x:scrollX,y:scrollY,id:card?.id,cardTop:card?.getBoundingClientRect().top,key:anchor?.dataset.viewKey,top:anchor?.getBoundingClientRect().top};
 }
@@ -84,6 +84,9 @@ function render(){
   const navLeft=$('#game-nav').scrollLeft;
   $('#game-count').textContent=`${list.length} ${list.length===1?'game':'games'}`;
   $('#game-nav').innerHTML=list.map(g=>`<a data-game-link href="#game-${esc(g.id)}" class="game-jump ${g.state==='in'?'jump-live':''}" aria-label="Jump to ${esc(g.away.name)} at ${esc(g.home.name)}">${g.state==='in'?'<i class="live-dot" aria-hidden="true"></i>':''}<span>${esc(g.away.code)} <span class="jump-at">at</span> ${esc(g.home.code)}</span></a>`).join('');
+  const shared=$('#daily-highlights'),sharedHTML=sharedHighlights(highlightDocs.get(selected));
+  if(shared.innerHTML!==sharedHTML)shared.innerHTML=sharedHTML;shared.hidden=!sharedHTML;
+  if(sharedHTML)$('#game-nav').insertAdjacentHTML('beforeend','<a data-game-link href="#daily-highlights" class="game-jump">Highlights</a>');
   const games=$('#games');
   if(view&&list.length&&games.querySelector('.game')){
     const wanted=new Set(list.map(g=>'game-'+g.id));
@@ -113,7 +116,7 @@ catch{if(token!==generation)return;if(!gotNetwork){let snapshot=null;try{const r
 problem=navigator.onLine?'Live feed unavailable. Showing the newest saved data if available. Try Refresh shortly.':'Offline. Showing the last saved slate if available.';
 if(slate)render();else{$('#games').innerHTML='<div class="empty"><h2>Scores couldn’t load.</h2><p>No saved data for this NBA date yet. Check your connection, then tap Refresh.</p><a href="https://www.espn.com/nba/scoreboard">Open ESPN ↗</a></div>';$('#games').setAttribute('aria-busy','false');$('#notice').hidden=false;$('#notice').textContent=problem;$('#updated').textContent='No data available';}}
 finally{if(token===generation){refreshing=false;$('#refresh').disabled=false;$('#refresh').setAttribute('aria-label','Refresh scores');schedule();}}}
-function changeDate(date){followingLatest=date===nbaDate();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return;stopPolling();generation++;refreshing=false;selected=date;slate=cached(date);source='Saved';problem='';highlightLoading=true;if(slate)render();else{$('#game-nav').innerHTML='';$('#game-count').textContent='Loading…';$('#games').innerHTML='<div class="skeleton" aria-label="Loading games"></div><div class="skeleton" aria-hidden="true"></div>';$('#games').setAttribute('aria-busy','true');$('#notice').hidden=true;$('#updated').textContent='Connecting…';updateHeader();}refresh();}
+function changeDate(date){$('#daily-highlights').hidden=true;$('#daily-highlights').innerHTML='';followingLatest=date===nbaDate();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return;stopPolling();generation++;refreshing=false;selected=date;slate=cached(date);source='Saved';problem='';highlightLoading=true;if(slate)render();else{$('#game-nav').innerHTML='';$('#game-count').textContent='Loading…';$('#games').innerHTML='<div class="skeleton" aria-label="Loading games"></div><div class="skeleton" aria-hidden="true"></div>';$('#games').setAttribute('aria-busy','true');$('#notice').hidden=true;$('#updated').textContent='Connecting…';updateHeader();}refresh();}
 $('#refresh').addEventListener('click',()=>refresh(true));$('#prev').addEventListener('click',()=>changeDate(shiftDate(selected,-1)));$('#next').addEventListener('click',()=>changeDate(shiftDate(selected,1)));$('#today').addEventListener('click',()=>changeDate(nbaDate()));$('#date').addEventListener('change',e=>changeDate(e.target.value));
 $('#game-nav').addEventListener('click',event=>{
   const link=event.target.closest('[data-game-link]');if(!link)return;
