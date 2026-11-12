@@ -173,134 +173,17 @@ function namedPlayers(text,game){
   return true;
  }));
 }
-const MONTHS='january february march april may june july august september october november december'.split(' ');
-function datesIn(text,year){
- const found=[];let m;
- const iso=/\b(20\d{2})[.\/-](\d{1,2})[.\/-](\d{1,2})\b/g;
- while((m=iso.exec(text)))found.push(`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`);
- const english=/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?/gi;
- while((m=english.exec(text))){const month=MONTHS.findIndex(x=>x.startsWith(m[1].slice(0,3).toLowerCase()))+1;found.push(`${m[3]||year}-${String(month).padStart(2,'0')}-${m[2].padStart(2,'0')}`);}
- const japanese=/(?:(20\d{2})年)?(\d{1,2})月(\d{1,2})日/g;
- while((m=japanese.exec(text)))found.push(`${m[1]||year}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`);
- return found;
-}
-function classify(title){
- if(/全試合|nightly recap|top\s*\d+\s*(plays|dunks)|preview|prediction|reaction|interview|press conference|podcast|season highlights|career highlights|all.time (?:highlights|best|plays)|throwback|compilation|injury|trade rumors?|contract|warm[ -]?up|practice|breaks? down|sounds? off|the association|top (?:plays|dunks) of|\bweek \d+\b/i.test(title))return null;
- return /full\s*game\s*highlights|ゲームハイライト|試合ハイライト/i.test(title)?'game':'player';
-}
-function pointScope(title){
- const quarter=title.match(/\bQ([1-4])\b|\b([1-4])(?:st|nd|rd|th)\s+quarter\b|\bin (?:the )?([1-4])(?:st|nd|rd|th)\b|\bOT(\d+)\b/i);
- const period=quarter?(+(quarter[1]||quarter[2]||quarter[3])||4+(+quarter[4])):null;
- const streak=/\b(?:straight|consecutive|unanswered)\s+(?:PTS|points)/i.test(title);
- return {period,streak,unanswered:/\bunanswered\b/i.test(title)};
-}
-function scopedPoints(game,player,scope,target){
- if(!scope.period&&!scope.streak)return player.pts;
- if(!game.plays?.length)return null;
- const plays=game.plays.filter(p=>(!scope.period||p.period?.number===scope.period)&&p.scoringPlay&&p.scoreValue>0).sort((a,b)=>Number(a.sequenceNumber)-Number(b.sequenceNumber));
- let total=0,run=0,best=0,found=false,ends=new Set();
- for(const play of plays){
-  const scorer=play.participants?.[0]?.athlete?.id;
-  if(scorer===player.id){total+=play.scoreValue;run+=play.scoreValue;best=Math.max(best,run);ends=new Set([play.scoreValue,...[...ends].map(n=>n+play.scoreValue)]);if(ends.has(target))found=true;}
-  else if(scope.unanswered||play.team?.id===player.teamId){run=0;ends.clear();}
- }
- return scope.streak?(target===undefined?best:found?target:null):total;
-}
-function claimedStats(title,players,game){
- const scope=pointScope(title),claims=[];
- const categories=[['pts','(?:PTS?\\b|points?\\b|得点)'],['reb','(?:REB\\b|rebounds?\\b|リバウンド)'],['ast','(?:AST\\b|assists?\\b|アシスト)'],['stl','(?:STL\\b|steals?\\b|スティール)'],['blk','(?:BLK\\b|blocks?\\b|ブロック)'],['tpm','(?:3PM\\b|threes?\\b|three[ -]pointers?\\b)']];
- const collective=players.length>1&&/\b(?:combined|combine|total|GO OFF For|trio|duo)\b/i.test(title);
- for(const [key,label]of categories){
-  const pattern=new RegExp(`(?<![\\d,.])(\\d{1,3})\\s*(\\+)?[\\s–-]*(?:(?:STRAIGHT|CONSECUTIVE|UNANSWERED)\\s+)?${label}`,'gi');
-  for(const m of title.matchAll(pattern)){
-   if(players.length>1&&!collective)return null;
-   if((scope.period||scope.streak)&&key!=='pts')return null;
-   const value=+m[1],atLeast=!!m[2];
-   const values=players.map(p=>key==='pts'?scopedPoints(game,p,scope,scope.streak&&!atLeast?value:undefined):p[key]);
-   if(values.some(v=>!Number.isFinite(v)))return null;
-   const actual=values.reduce((a,b)=>a+b,0);
-   if(atLeast?actual<value:actual!==value)return null;
-   claims.push({stat:key,value,atLeast,actual,scope:scope.streak?(scope.unanswered?'unanswered-run':'consecutive-team-points'):scope.period?'period':'game',...(scope.period?{period:scope.period}:{}),...(collective?{combinedPlayerIds:players.map(p=>p.id)}:{})});
-  }
- }
- for(const m of title.matchAll(/\b(\d{1,2})\s*(?:\/|-of-|-for-)\s*(\d{1,2})\s*(?:FG|shooting|from the field)\b/gi)){
-  if(players.length!==1||scope.period||scope.streak)return null;
-  if(players[0].fgm!==+m[1]||players[0].fga!==+m[2])return null;
-  claims.push({stat:'fg',value:`${m[1]}/${m[2]}`,scope:'game'});
- }
- return claims;
-}
-function descriptionClaims(description,players,game){
- if(players.length!==1)return [];
- const claims=[];
- // Only player-attributed current-performance sentences, never career/season aggregates.
- for(const rawSentence of description.split(/[.!?\n]+/)){
-  const sentence=rawSentence.split(/\b(?:recording his|becoming|joining)\b/i)[0];
-  if(/career total|career games?|at least|through (?:his|their)|first \d+|following up|since \d{4}|history|joins|multiple|at least \d+.*games/i.test(sentence))continue;
-  if(!namedPlayers(sentence,game).some(p=>p.id===players[0].id)||!/\b(?:dropped|scored|finished|contributed|led|put up|recorded)\b/i.test(sentence))continue;
-  // Multiple named athletes need clause-level attribution; avoid borrowing their numbers.
-  if(namedPlayers(sentence,game).some(p=>p.id!==players[0].id))continue;
-  const found=claimedStats(sentence,players,game);if(found===null)return null;
-  claims.push(...found);
- }
- return claims;
-}
-function matchVideo(video,game,anchors=null){
- if(game.state!=='post')return null;
- const published=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest),start=Date.parse(game.start);
- if(!Number.isFinite(published)||!Number.isFinite(latest)||latest<published||published<start||latest>start+72*3600000)return null;
- const type=classify(video.title);if(!type)return null;
- const description=(video.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200),text=video.title+'\n'+description;
- const players=type==='player'?namedPlayers(video.title,game):[];
- if(conflictingOpponent(text,video.title,game))return null;
- if(type==='game' && (!teamMention(text,game.away)||!teamMention(text,game.home)))return null;
- if(type==='player'&&!players.length)return null;
- const japan=video.channelId===CHANNELS[2].id,expected=/日本時間/.test(text)?dateInZone(new Date(game.start),'Asia/Tokyo'):game.date;
- const allowed=japan&&!/日本時間/.test(text)?[game.date,dateInZone(new Date(game.start),'Asia/Tokyo')]:[expected];
- const titleDates=datesIn(video.title,expected.slice(0,4));if(titleDates.some(d=>!allowed.includes(d)))return null;
- const hasDate=datesIn(text,expected.slice(0,4)).some(d=>allowed.includes(d));
- const hasOpponent=type==='game'||players.some(player=>teamMention(text,player.teamId===game.away.id?game.home:game.away,true));
- // Listing-only evidence must identify the date and matchup directly. Never infer
- // a missing game identity from a rough upload age or an unverified description.
- if(video.metadataSource==='channel-page'&&(!hasDate||!hasOpponent))return null;
- // A stated final score must agree. Avoid mistaking season labels and dates for scores.
- const pairs=[...text.matchAll(/\b(\d{2,3})\s*[-–]\s*(\d{2,3})\b/g)].map(m=>[+m[1],+m[2]]).filter(([a,b])=>a>=50&&b>=50);
- if(pairs.some(([a,b])=>!(a===game.away.score&&b===game.home.score||a===game.home.score&&b===game.away.score)))return null;
- const titleClaims=type==='player'?claimedStats(video.title,players,game):[];if(!titleClaims)return null;
- const described=type==='player'?descriptionClaims(description,players,game):[];if(!described)return null;
- const claims=[...titleClaims,...described];
- let method='direct',corroboration=[];
- if(!hasDate||!hasOpponent){
-  // Only direct matches can anchor inference; inferred videos never validate each other.
-  if(!anchors||type!=='player'||published<start+90*60000||latest>start+18*3600000||video.metadataSource==='channel-page')return null;
-  const stats=new Set(claims.map(c=>c.stat));
-  if(hasDate ? !stats.size : !stats.has('pts')||stats.size<(hasOpponent||pairs.length?2:3))return null;
-  corroboration=(anchors.get(game.id)||[]).filter(link=>link.id!==video.id&&(link.type==='game'||players.every(p=>link.players.some(other=>other.id===p.id)))).map(link=>link.id);
-  if(!corroboration.length)return null;
-  method='corroborated';
- }
- return {id:video.id,title:video.title,channel:CHANNELS.find(c=>c.id===video.channelId).name,channelId:video.channelId,type,players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method,metadataSource:video.metadataSource||'watch-page',dated:hasDate,opponent:hasOpponent,stats:claims,...(corroboration.length?{corroboratingVideoIds:corroboration}:{})}};
-}
-// Broad opt-in fallback for all three approved channels. False positives are preferred
-// to missing relevant uploads; statistics, content classification and corroboration
-// are deliberately not required here. Direct matches remain the first choice.
-function gameEnd(game){
- const start=Date.parse(game.start),period=Math.max(4,game.period||0);
- const plays=(game.plays||[]).filter(p=>p.period?.number>=period&&Number.isFinite(Date.parse(p.wallclock))&&Date.parse(p.wallclock)>=start&&Date.parse(p.wallclock)<=Date.now()).sort((a,b)=>Date.parse(a.wallclock)-Date.parse(b.wallclock));
- const end=plays.filter(p=>/end of.*(?:quarter|period|game)|game end/i.test(p.text||'')).at(-1)||plays.at(-1);
- return end?{at:end.wallclock,basis:/end of|game end/i.test(end.text||'')?'final-period-end':'last-final-period-play'}:null;
-}
+// Sole matcher: approved source, player/team identity, and upload near tip-off.
+// Each qualifying game receives the link; false positives are intentionally tolerated.
 function relaxedMatch(video,game){
- const channel=CHANNELS.find(c=>c.id===video.channelId),end=gameEnd(game);
- if(!channel||game.state!=='post'||!end)return null;
- const earliest=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest),finish=Date.parse(end.at);
- if(!Number.isFinite(earliest)||!Number.isFinite(latest)||latest<earliest||latest<finish||earliest>finish+10*3600000)return null;
+ const channel=CHANNELS.find(c=>c.id===video.channelId),start=Date.parse(game.start);
+ if(!channel||!['in','post'].includes(game.state)||!Number.isFinite(start)||start>Date.now())return null;
+ const earliest=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest);
+ if(!Number.isFinite(earliest)||!Number.isFinite(latest)||latest<earliest||latest<start||earliest>start+15*3600000)return null;
  const description=(video.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200),text=video.title+'\n'+description;
  const players=namedPlayers(text,game),teams=[game.away,game.home].filter(team=>teamMention(text,team,true));
  if(!players.length&&!teams.length)return null;
- const allowed=[game.date,...(channel===CHANNELS[2]?[dateInZone(new Date(game.start),'Asia/Tokyo')]:[])];
- if(datesIn(video.title,game.date.slice(0,4)).some(date=>!allowed.includes(date)))return null;
- return {id:video.id,title:video.title,channel:channel.name,channelId:channel.id,type:classify(video.title)==='game'?'game':'player',players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method:'relaxed-postgame',metadataSource:video.metadataSource||'watch-page',gameEndedAt:end.at,endTimeBasis:end.basis,windowHours:10,approximateUploadTime:!video.publishedAt,matchedTeamIds:teams.map(t=>t.id),stats:[]}};
+ return {id:video.id,title:video.title,channel:channel.name,channelId:channel.id,type:/full\s*game\s*highlights|ゲームハイライト|試合ハイライト/i.test(video.title)?'game':'player',players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method:'relaxed-started-game',metadataSource:video.metadataSource||'watch-page',gameStartedAt:game.start,windowHours:15,approximateUploadTime:!video.publishedAt,matchedTeamIds:teams.map(t=>t.id)}};
 }
 async function inspect(candidate){
  const html=await publicText(`https://www.youtube.com/watch?v=${candidate.id}`),raw=assignedJSON(html,'ytInitialPlayerResponse'),v=raw.videoDetails,m=raw.microformat?.playerMicroformatRenderer;
@@ -312,10 +195,10 @@ const supplied=process.argv.slice(2);if(supplied.some(d=>!/^\d{4}-\d{2}-\d{2}$/.
 const slateFiles=(await readdir(ROOT)).filter(f=>/^\d{4}-\d{2}-\d{2}\.json$/.test(f));
 const dates=supplied.length?supplied:[...new Set([...slateFiles.map(f=>f.slice(0,10)),nbaDate(),shiftDate(nbaDate(),-1)])];
 const slates=[],games=[];
-for(const date of dates){const slate=await json(new URL(`${date}.json`,ROOT));if(!slate||slate.date!==date)continue;slates.push(slate);for(const g of slate.games.filter(g=>g.state==='post'))games.push({...g,date,roster:[...g.away.players.map(p=>({...p,teamId:g.away.id})),...g.home.players.map(p=>({...p,teamId:g.home.id}))]});}
+for(const date of dates){const slate=await json(new URL(`${date}.json`,ROOT));if(!slate||slate.date!==date)continue;slates.push(slate);for(const g of slate.games.filter(g=>['in','post'].includes(g.state)))games.push({...g,date,roster:[...g.away.players.map(p=>({...p,teamId:g.away.id})),...g.home.players.map(p=>({...p,teamId:g.home.id}))]});}
 if(!slates.length)throw new Error('No scoreboard snapshots available');
 // All played athletes, rather than only the displayed five, are eligible for highlights.
-await mapLimit(games,3,async g=>{try{const raw=await getJSON(`${API}/apis/site/v2/sports/basketball/nba/summary?event=${g.id}`);const all=[...parsePlayers(raw.boxscore,g.away.id).all.map(p=>({...p,teamId:g.away.id})),...parsePlayers(raw.boxscore,g.home.id).all.map(p=>({...p,teamId:g.home.id}))];if(all.length)g.roster=all;g.plays=raw.plays||[];g.playsPartial=!g.plays.length;}catch{g.rosterPartial=true;}});
+await mapLimit(games,3,async g=>{try{const raw=await getJSON(`${API}/apis/site/v2/sports/basketball/nba/summary?event=${g.id}`);const all=[...parsePlayers(raw.boxscore,g.away.id).all.map(p=>({...p,teamId:g.away.id})),...parsePlayers(raw.boxscore,g.home.id).all.map(p=>({...p,teamId:g.home.id}))];if(all.length)g.roster=all;}catch{g.rosterPartial=true;}});
 playerDirectory=[...new Map(games.flatMap(g=>g.roster).map(p=>[p.id,p])).values()];
 const catalog=await json(new URL('catalog.json',OUT),{videos:{}}),candidates=new Map(),sources=[];
 await mapLimit(CHANNELS,3,async channel=>{
@@ -337,20 +220,16 @@ await mapLimit(pending,3,async candidate=>{
   if((candidate.publishedAt||candidate.publicationWindow)&&(!video||video.metadataSource==='channel-page'||video.metadataSource==='rss')){
    const fallback={...candidate,checkedAt:new Date().toISOString()};
    // Incomplete listing evidence must not replace a previously verified archive link.
-   if(fallback.metadataSource==='rss'||games.some(game=>matchVideo(fallback,game)||relaxedMatch(fallback,game))){catalog.videos[candidate.id]=fallback;fallbacks++;}
+   if(fallback.metadataSource==='rss'||games.some(game=>relaxedMatch(fallback,game))){catalog.videos[candidate.id]=fallback;fallbacks++;}
   }
  }
 });
 // Match the recent catalog as well as this run's discoveries so an RSS-window change
 // or temporarily unavailable watch page does not discard previously checked metadata.
-const videos=Object.values(catalog.videos).filter(v=>CHANNELS.some(c=>c.id===v.channelId)),anchors=new Map(),matches=new Map();
-function uniqueMatch(video,corroboration=null){const hits=games.map(game=>({game,link:matchVideo(video,game,corroboration)})).filter(x=>x.link);return hits.length===1?hits[0]:null;}
-for(const video of videos){const hit=uniqueMatch(video);if(!hit)continue;matches.set(video.id,hit);const list=anchors.get(hit.game.id)||[];anchors.set(hit.game.id,[...list,hit.link]);}
-for(const video of videos){if(matches.has(video.id))continue;const hit=uniqueMatch(video,anchors);if(hit)matches.set(video.id,hit);}
-for(const video of videos){
- if(matches.has(video.id))continue;
- const hits=games.map(game=>({game,link:relaxedMatch(video,game)})).filter(hit=>hit.link);
- if(hits.length===1)matches.set(video.id,hits[0]);
+const videos=Object.values(catalog.videos).filter(v=>CHANNELS.some(c=>c.id===v.channelId)),matches=new Map();
+for(const video of videos)for(const game of games){
+ const link=relaxedMatch(video,game);
+ if(link)matches.set(`${video.id}:${game.date}:${game.id}`,{game,link});
 }
 for(const {game,link}of matches.values()){const doc=docs.get(game.date),prior=doc.games[game.id]||[];doc.games[game.id]=[...prior.filter(v=>v.id!==link.id),link];accepted++;}
 for(const [date,doc]of docs){
@@ -359,15 +238,13 @@ for(const [date,doc]of docs){
   doc.games[id]=doc.games[id].filter(link=>{
    const validSaved=link.gameDate===date&&CHANNELS.some(c=>c.id===link.channelId)&&/^[\w-]{11}$/.test(link.id);
    if(!validSaved)return false;
-   if(!catalog.videos[link.id]||matches.get(link.id)?.game.id===id)return true;
+   if(!catalog.videos[link.id]||matches.has(`${link.id}:${date}:${id}`))return true;
    // A failed full-roster lookup leaves only the displayed five. Keep previously
    // verified links for other athletes until their roster can be checked again.
-   if(link.matchEvidence?.method==='relaxed-postgame'&&!gameEnd(game)&&catalog.videos[link.id]?.title===link.title)return true;
-   if(!game.plays?.length&&catalog.videos[link.id]?.title===link.title&&link.matchEvidence?.stats?.some(stat=>stat.scope&&stat.scope!=='game'))return true;
    return game.rosterPartial&&link.type==='player'&&link.players?.some(p=>!game.roster.some(r=>r.id===p.id));
   }).sort((a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt||a.publicationWindow?.latest)-Date.parse(b.publishedAt||b.publicationWindow?.latest));
  }
- doc.lookupPartial=sources.some(s=>!s.ok)||failed>0||games.some(g=>g.date===date&&(g.rosterPartial||g.playsPartial));await atomic(new URL(`${date}.json`,OUT),doc);
+ doc.lookupPartial=sources.some(s=>!s.ok)||failed>0||games.some(g=>g.date===date&&g.rosterPartial);await atomic(new URL(`${date}.json`,OUT),doc);
  console.log(`${date}: ${Object.values(doc.games).flat().length} game-matched YouTube links`);
 }
 // Keep a bounded recent metadata catalog; dated matched links form the public archive.
