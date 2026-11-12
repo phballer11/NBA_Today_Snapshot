@@ -281,6 +281,27 @@ function matchVideo(video,game,anchors=null){
  }
  return {id:video.id,title:video.title,channel:CHANNELS.find(c=>c.id===video.channelId).name,channelId:video.channelId,type,players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method,metadataSource:video.metadataSource||'watch-page',dated:hasDate,opponent:hasOpponent,stats:claims,...(corroboration.length?{corroboratingVideoIds:corroboration}:{})}};
 }
+// Broad opt-in fallback for all three approved channels. False positives are preferred
+// to missing relevant uploads; statistics, content classification and corroboration
+// are deliberately not required here. Direct matches remain the first choice.
+function gameEnd(game){
+ const start=Date.parse(game.start),period=Math.max(4,game.period||0);
+ const plays=(game.plays||[]).filter(p=>p.period?.number>=period&&Number.isFinite(Date.parse(p.wallclock))&&Date.parse(p.wallclock)>=start&&Date.parse(p.wallclock)<=Date.now()).sort((a,b)=>Date.parse(a.wallclock)-Date.parse(b.wallclock));
+ const end=plays.filter(p=>/end of.*(?:quarter|period|game)|game end/i.test(p.text||'')).at(-1)||plays.at(-1);
+ return end?{at:end.wallclock,basis:/end of|game end/i.test(end.text||'')?'final-period-end':'last-final-period-play'}:null;
+}
+function relaxedMatch(video,game){
+ const channel=CHANNELS.find(c=>c.id===video.channelId),end=gameEnd(game);
+ if(!channel||game.state!=='post'||!end)return null;
+ const earliest=Date.parse(video.publishedAt||video.publicationWindow?.earliest),latest=Date.parse(video.publishedAt||video.publicationWindow?.latest),finish=Date.parse(end.at);
+ if(!Number.isFinite(earliest)||!Number.isFinite(latest)||latest<earliest||latest<finish||earliest>finish+10*3600000)return null;
+ const description=(video.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200),text=video.title+'\n'+description;
+ const players=namedPlayers(text,game),teams=[game.away,game.home].filter(team=>teamMention(text,team,true));
+ if(!players.length&&!teams.length)return null;
+ const allowed=[game.date,...(channel===CHANNELS[2]?[dateInZone(new Date(game.start),'Asia/Tokyo')]:[])];
+ if(datesIn(video.title,game.date.slice(0,4)).some(date=>!allowed.includes(date)))return null;
+ return {id:video.id,title:video.title,channel:channel.name,channelId:channel.id,type:classify(video.title)==='game'?'game':'player',players:players.map(p=>({id:p.id,name:p.name})),publishedAt:video.publishedAt||null,...(video.publicationWindow?{publicationWindow:video.publicationWindow}:{}),matchedAt:new Date().toISOString(),gameDate:game.date,matchEvidence:{method:'relaxed-postgame',metadataSource:video.metadataSource||'watch-page',gameEndedAt:end.at,endTimeBasis:end.basis,windowHours:10,approximateUploadTime:!video.publishedAt,matchedTeamIds:teams.map(t=>t.id),stats:[]}};
+}
 async function inspect(candidate){
  const html=await publicText(`https://www.youtube.com/watch?v=${candidate.id}`),raw=assignedJSON(html,'ytInitialPlayerResponse'),v=raw.videoDetails,m=raw.microformat?.playerMicroformatRenderer;
  if(v?.videoId!==candidate.id||v.channelId!==candidate.channelId||!v.title||!m?.publishDate)throw new Error(`Watch metadata unavailable (${raw.playabilityStatus?.status||'missing details'})`);
@@ -304,8 +325,8 @@ await mapLimit(CHANNELS,3,async channel=>{
 const docs=new Map();for(const slate of slates){const old=await json(new URL(`${slate.date}.json`,OUT),{});docs.set(slate.date,{schema:1,date:slate.date,checkedAt:new Date().toISOString(),sources,games:old.games||{}});}
 let inspected=0,accepted=0,failed=0,fallbacks=0;const lookupErrors=new Map();
 const pending=[...candidates.values()].filter(v=>{
- if(!classify(v.title))return false;
- return games.some(g=>{const dated=datesIn(v.title,g.date.slice(0,4));if(dated.length&&!dated.includes(g.date)&&!dated.includes(dateInZone(new Date(g.start),'Asia/Tokyo')))return false;return classify(v.title)==='game'?teamMention(v.title,g.away)&&teamMention(v.title,g.home):namedPlayers(v.title,g).length>0||v.channelId===CHANNELS[2].id&&/得点|リバウンド|アシスト|ブロック|ハイライト/.test(v.title);});
+ const text=v.title+'\n'+(v.description||'').split(/Never miss|▼|Subscribe|Follow us/i)[0].slice(0,2200);
+ return games.some(g=>namedPlayers(text,g).length||teamMention(text,g.away,true)||teamMention(text,g.home,true)||v.channelId===CHANNELS[2].id&&/得点|リバウンド|アシスト|ブロック|ハイライト/.test(v.title));
 });
 await mapLimit(pending,3,async candidate=>{
  let video=catalog.videos[candidate.id];
@@ -316,7 +337,7 @@ await mapLimit(pending,3,async candidate=>{
   if((candidate.publishedAt||candidate.publicationWindow)&&(!video||video.metadataSource==='channel-page'||video.metadataSource==='rss')){
    const fallback={...candidate,checkedAt:new Date().toISOString()};
    // Incomplete listing evidence must not replace a previously verified archive link.
-   if(fallback.metadataSource==='rss'||games.some(game=>matchVideo(fallback,game))){catalog.videos[candidate.id]=fallback;fallbacks++;}
+   if(fallback.metadataSource==='rss'||games.some(game=>matchVideo(fallback,game)||relaxedMatch(fallback,game))){catalog.videos[candidate.id]=fallback;fallbacks++;}
   }
  }
 });
@@ -326,6 +347,11 @@ const videos=Object.values(catalog.videos).filter(v=>CHANNELS.some(c=>c.id===v.c
 function uniqueMatch(video,corroboration=null){const hits=games.map(game=>({game,link:matchVideo(video,game,corroboration)})).filter(x=>x.link);return hits.length===1?hits[0]:null;}
 for(const video of videos){const hit=uniqueMatch(video);if(!hit)continue;matches.set(video.id,hit);const list=anchors.get(hit.game.id)||[];anchors.set(hit.game.id,[...list,hit.link]);}
 for(const video of videos){if(matches.has(video.id))continue;const hit=uniqueMatch(video,anchors);if(hit)matches.set(video.id,hit);}
+for(const video of videos){
+ if(matches.has(video.id))continue;
+ const hits=games.map(game=>({game,link:relaxedMatch(video,game)})).filter(hit=>hit.link);
+ if(hits.length===1)matches.set(video.id,hits[0]);
+}
 for(const {game,link}of matches.values()){const doc=docs.get(game.date),prior=doc.games[game.id]||[];doc.games[game.id]=[...prior.filter(v=>v.id!==link.id),link];accepted++;}
 for(const [date,doc]of docs){
  for(const id of Object.keys(doc.games)){
@@ -336,6 +362,7 @@ for(const [date,doc]of docs){
    if(!catalog.videos[link.id]||matches.get(link.id)?.game.id===id)return true;
    // A failed full-roster lookup leaves only the displayed five. Keep previously
    // verified links for other athletes until their roster can be checked again.
+   if(link.matchEvidence?.method==='relaxed-postgame'&&!gameEnd(game)&&catalog.videos[link.id]?.title===link.title)return true;
    if(!game.plays?.length&&catalog.videos[link.id]?.title===link.title&&link.matchEvidence?.stats?.some(stat=>stat.scope&&stat.scope!=='game'))return true;
    return game.rosterPartial&&link.type==='player'&&link.players?.some(p=>!game.roster.some(r=>r.id===p.id));
   }).sort((a,b)=>CHANNELS.findIndex(c=>c.id===a.channelId)-CHANNELS.findIndex(c=>c.id===b.channelId)||Date.parse(a.publishedAt||a.publicationWindow?.latest)-Date.parse(b.publishedAt||b.publicationWindow?.latest));
