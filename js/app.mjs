@@ -1,4 +1,4 @@
-import {deviceZone,nbaDate,dateInZone,shiftDate,loadSlate,getJSON} from './data.mjs';
+import {deviceZone,nbaDate,dateInZone,shiftDate,loadSlate,getJSON,sortGames} from './data.mjs';
 import {esc,time,shortDate,zoneLabel,playerTable,quarterTable} from './view.mjs';
 import {highlightSection,sharedHighlights,validHighlights,updateHighlightFreshness} from './highlights.mjs';
 const $=s=>document.querySelector(s);
@@ -39,7 +39,7 @@ function cached(date){const d=store.get(prefix+date);return d?.schema===1 && d.d
 function rank(t){return `${t.rank ? `${t.conference?esc(t.conference)+' ':''}#${esc(t.rank)}${t.tied?'=':''} · `:''}${esc(t.record||'Record unavailable')}`;}
 const stat=v=>v===null||v===undefined?'—':esc(v);
 function team(t,side){return `<div class="team-score ${side}"><span class="team-code">${esc(t.code)}</span><span class="team-name">${esc(t.name)}</span><span class="team-record" title="${t.rankDerived?'Conference position by win percentage; = marks ties; no tie-break assumptions':'Latest available conference position and season record'}">${rank(t)}</span></div>`;}
-function gameCard(g){const live=g.state==='in',observed=source!=='ESPN'||Date.now()-Date.parse(slate.updatedAt)>180000,started=g.state!=='pre',final=g.state==='post';const aWin=final && g.away.score>g.home.score,hWin=final && g.home.score>g.away.score;return `<article id="game-${esc(g.id)}" tabindex="-1" class="game ${live?'is-live':''}" aria-label="${esc(g.away.name)} at ${esc(g.home.name)}, ${esc(g.status)}"><div class="game-top" data-view-key="status"><span class="status ${final?'final':''}">${live?`<i class="live-dot" aria-hidden="true"></i> ${observed?'LAST SEEN':'LIVE'} · `:''}${esc(g.status)}</span><span class="tip">${g.start?`${esc(shortDate(g.start))} · ${esc(time(g.start))} ${esc(zoneLabel(g.start))}`:''}</span></div><div class="scoreboard" data-view-key="scoreboard">${team(g.away,'away')}<div><div class="score-pair"><span class="${final&&!aWin?'dim':''}">${started?stat(g.away.score):'—'}</span><span class="dash">:</span><span class="${final&&!hWin?'dim':''}">${started?stat(g.home.score):'—'}</span></div><span class="at">AWAY / HOME</span></div>${team(g.home,'home')}</div>${quarterTable(g)}${g.notes?.length?`<div class="notes" data-view-key="notes"><p class="note-label">GAME NOTES${g.detailsError?' · SAVED':''}</p>${g.notes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${started?`<div class="team-boxes">${playerTable(g.away)}${playerTable(g.home)}</div>`:`<div class="pending">${esc(g.venue)}${g.venue?' · ':''}Tip-off in your local time above.<br>Top performers appear when the game begins.</div>`}${g.detailsError?`<div class="pending">${g.detailsUpdatedAt?`Player stats saved ${esc(age(g.detailsUpdatedAt))}.`: 'Player stats temporarily unavailable.'} Scores and player stats may update separately.</div>`:''}<div class="card-foot" data-view-key="links"><span>${started?`Box ${g.detailsUpdatedAt?esc(age(g.detailsUpdatedAt)):'pending'}`:'SCHEDULED'} · ${esc(g.away.code)} AT ${esc(g.home.code)}</span><a href="https://www.espn.com/nba/game/_/gameId/${encodeURIComponent(g.id)}" target="_blank" rel="noopener noreferrer" aria-label="Full ${esc(g.away.code)} at ${esc(g.home.code)} game on ESPN">Game ↗</a></div>${highlightSection(g,highlightDocs.get(selected),highlightLoading)}</article>`;}
+function gameCard(g){const live=g.state==='in',observed=source!=='ESPN'||Date.now()-Date.parse(slate.updatedAt)>180000,started=g.state!=='pre',final=g.state==='post';const aWin=final && g.away.score>g.home.score,hWin=final && g.home.score>g.away.score;return `<article id="game-${esc(g.id)}" tabindex="-1" class="game ${live?'is-live':''}" aria-label="${esc(g.away.name)} at ${esc(g.home.name)}, ${esc(g.status)}"><div class="game-top" data-view-key="status"><span class="status ${final?'final':''}">${live?`<i class="live-dot" aria-hidden="true"></i> ${observed?'LAST SEEN':'LIVE'} · `:''}${esc(g.status)}</span><span class="tip">${g.start?`${esc(shortDate(g.start))} · ${esc(time(g.start))} ${esc(zoneLabel(g.start))}`:''}</span></div><div class="scoreboard" data-view-key="scoreboard">${team(g.away,'away')}<div><div class="score-pair"><span class="${final&&!aWin?'dim':''}">${started?stat(g.away.score):'—'}</span><span class="dash">:</span><span class="${final&&!hWin?'dim':''}">${started?stat(g.home.score):'—'}</span></div><span class="at">AWAY / HOME</span></div>${team(g.home,'home')}</div>${quarterTable(g)}${started?`<div class="team-boxes">${playerTable(g.away,g.id)}${playerTable(g.home,g.id)}</div>`:`<div class="pending">${esc(g.venue)}${g.venue?' · ':''}Tip-off in your local time above.<br>The played roster appears when the game begins.</div>`}${g.detailsError?`<div class="pending">${g.detailsUpdatedAt?`Player stats saved ${esc(age(g.detailsUpdatedAt))}.`: 'Player stats temporarily unavailable.'} Scores and player stats may update separately.</div>`:''}<div class="card-foot" data-view-key="links"><span>${started?`Box ${g.detailsUpdatedAt?esc(age(g.detailsUpdatedAt)):'pending'}`:'SCHEDULED'} · ${esc(g.away.code)} AT ${esc(g.home.code)}</span><a href="https://www.espn.com/nba/game/_/gameId/${encodeURIComponent(g.id)}" target="_blank" rel="noopener noreferrer" aria-label="Full ${esc(g.away.code)} at ${esc(g.home.code)} game on ESPN">Game ↗</a></div>${highlightSection(g,highlightDocs.get(selected),highlightLoading)}</article>`;}
 function updateHeader(){
   const view=captureView();updateHighlightFreshness();restoreView(view);
   const now=new Date(),zone=deviceZone();
@@ -73,14 +73,11 @@ function restoreView(view){
 function render(){
   const view=captureView();
   updateHeader();if(!slate)return;
-  const priority={in:0,post:1,pre:2};
-  let list=[...slate.games].sort((a,b)=>(priority[a.state]??3)-(priority[b.state]??3)||Date.parse(a.start)-Date.parse(b.start));
-  // Status changes must not move a game the reader is already viewing.
-  if(view){const order=new Map([...$('#games').querySelectorAll('.game')].map((el,i)=>[el.id,i]));list.sort((a,b)=>(order.get('game-'+a.id)??Infinity)-(order.get('game-'+b.id)??Infinity));}
+  const list=sortGames(slate.games);
   const active=document.activeElement,activeTable=(active?.classList?.contains('table-wrap')||active?.classList?.contains('quarter-wrap'))?active.getAttribute('aria-label'):null;
   const activeCard=active?.classList?.contains('game')?active.id:null;
   const activeJump=active?.closest?.('[data-game-link]')?.getAttribute('href'),activeVideo=active?.closest?.('[data-video-id]')?.dataset.videoId;
-  const scrolls=[...document.querySelectorAll('.table-wrap, .quarter-wrap')].map(el=>[el.getAttribute('aria-label'),el.scrollLeft]);
+  const scrolls=[...document.querySelectorAll('.table-wrap, .quarter-wrap')].map(el=>[el.getAttribute('aria-label'),el.scrollLeft,el.scrollTop]);
   const navLeft=$('#game-nav').scrollLeft;
   $('#game-count').textContent=`${list.length} ${list.length===1?'game':'games'}`;
   $('#game-nav').innerHTML=list.map(g=>`<a data-game-link href="#game-${esc(g.id)}" class="game-jump ${g.state==='in'?'jump-live':''}" aria-label="Jump to ${esc(g.away.name)} at ${esc(g.home.name)}">${g.state==='in'?'<i class="live-dot" aria-hidden="true"></i>':''}<span>${esc(g.away.code)} <span class="jump-at">at</span> ${esc(g.home.code)}</span></a>`).join('');
@@ -95,11 +92,17 @@ function render(){
       const template=document.createElement('template');template.innerHTML=gameCard(game);
       const next=template.content.firstElementChild,existing=document.getElementById(next.id);
       if(existing){if(existing.outerHTML!==next.outerHTML)existing.replaceWith(next);}else games.append(next);
+      games.append(document.getElementById(next.id));
     }
   }else games.innerHTML=list.length?list.map(gameCard).join(''):'<div class="empty"><h2>A quiet day on the court.</h2><p>No games on this NBA date. Try the arrows for another slate.</p></div>';
+  for(const heading of games.querySelectorAll('.game-group-label'))heading.remove();
+  const groups=new Set(),labels={in:'Live games',post:'Finished games',pre:'Upcoming games'};
+  for(const game of list)if(!groups.has(game.state)){
+    groups.add(game.state);const heading=document.createElement('h2');heading.className='game-group-label';heading.textContent=labels[game.state]||'Games';games.insertBefore(heading,document.getElementById('game-'+game.id));
+  }
   games.dataset.date=selected;
   $('#game-nav').scrollLeft=navLeft;
-  for(const [label,left]of scrolls){const el=[...document.querySelectorAll('.table-wrap, .quarter-wrap')].find(e=>e.getAttribute('aria-label')===label);if(el)el.scrollLeft=left;}
+  for(const [label,left,top]of scrolls){const el=[...document.querySelectorAll('.table-wrap, .quarter-wrap')].find(e=>e.getAttribute('aria-label')===label);if(el){el.scrollLeft=left;el.scrollTop=top;}}
   if(activeCard)document.getElementById(activeCard)?.focus({preventScroll:true});
   if(activeTable)[...document.querySelectorAll('.table-wrap, .quarter-wrap')].find(e=>e.getAttribute('aria-label')===activeTable)?.focus({preventScroll:true});
   if(activeJump)[...document.querySelectorAll('[data-game-link]')].find(e=>e.getAttribute('href')===activeJump)?.focus({preventScroll:true});

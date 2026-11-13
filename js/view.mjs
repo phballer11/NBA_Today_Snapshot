@@ -5,14 +5,13 @@ export const shortDate=(date,zone=deviceZone())=>new Intl.DateTimeFormat(undefin
 export const zoneLabel=(date=new Date(),zone=deviceZone())=>new Intl.DateTimeFormat(undefined,{timeZone:zone,timeZoneName:'short'}).formatToParts(new Date(date)).find(p=>p.type==='timeZoneName')?.value||zone;
 const stat=value=>value===null||value===undefined?'—':esc(value);
 const shooting=(made,attempted)=>made==null||attempted==null?'—':`${stat(made)}/${stat(attempted)}`;
-export function playerTable(team){
-  const columns=[['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['to','TO'],['fg','FG'],['three','3PT'],['ft','FT']];
-  return `<section class="box"><div class="box-heading" data-view-key="box-${esc(team.code)}"><h3>${esc(team.code)}</h3><span>Box Score${team.ranking==='Game Score'?'':' · '+esc(team.ranking)}</span></div>${team.players.length?`
-    <div class="table-wrap" tabindex="0" role="region" aria-label="${esc(team.name)} player statistics">
-      <table class="stats" role="table"><caption class="sr-only">${esc(team.name)} players ranked by ${esc(team.ranking)}. Shooting is made / attempted.</caption>
-      <thead><tr role="row"><th class="player-label" scope="col" role="columnheader">PLAYER</th>${columns.map(([,label])=>`<th scope="col" role="columnheader">${label}</th>`).join('')}</tr></thead>
-      <tbody>${team.players.map(player=>`<tr role="row" data-view-key="player-${esc(team.code)}-${esc(player.name)}"><th scope="row" role="rowheader" class="player" title="${player.rating==null?'Game Score unavailable':`Game Score ${player.rating.toFixed(1)}`}">${esc(player.name)} <span class="jersey">${player.jersey!=null?'#'+esc(player.jersey):''}</span></th>${columns.map(([key])=>`<td role="cell" class="${key==='to' && player.to>=5?'stat-turnover':isHighlightedStat(key,player[key])?'stat-highlight':((key==='reb'||key==='ast') && player[key]>=5 && player[key]<10 || key==='pts' && player.pts>=10 && player.pts<20)?'stat-secondary':''}">${key==='fg'?shooting(player.fgm,player.fga):key==='three'?shooting(player.tpm,player.tpa):key==='ft'?shooting(player.ftm,player.fta):stat(player[key])}</td>`).join('')}</tr>`).join('')}</tbody></table>
-    </div>`:'<p class="muted">Player stats have not arrived yet.</p>'}</section>`;
+export function playerTable(team,gameId=''){
+ const key=`${gameId}-${team.id}`,roster=team.roster||[];
+ const starters=roster.filter(p=>p.starter),bench=roster.filter(p=>!p.starter);
+ const columns=[['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['to','TO'],['fg','FG'],['three','3PT'],['ft','FT']];
+ const rows=players=>players.map(player=>`<tr role="row" data-view-key="player-${esc(team.code)}-${esc(player.name)}"><th scope="row" role="rowheader" class="player">${esc(player.name)} <span class="jersey">${player.jersey!=null?'#'+esc(player.jersey):''}</span></th>${columns.map(([k])=>`<td role="cell" class="${k==='to'&&player.to>=5?'stat-turnover':isHighlightedStat(k,player[k])?'stat-highlight':((k==='reb'||k==='ast')&&player[k]>=5&&player[k]<10||k==='pts'&&player.pts>=10&&player.pts<20)?'stat-secondary':''}">${k==='fg'?shooting(player.fgm,player.fga):k==='three'?shooting(player.tpm,player.tpa):k==='ft'?shooting(player.ftm,player.fta):stat(player[k])}</td>`).join('')}</tr>`).join('');
+ const table=(players,header=true)=>`<table class="stats" role="table"><caption class="sr-only">${esc(team.name)} played roster, starters then bench. Shooting is made / attempted.</caption>${header?`<thead><tr role="row"><th class="player-label" scope="col">PLAYER</th>${columns.map(([,label])=>`<th scope="col">${label}</th>`).join('')}</tr></thead>`:''}<tbody>${rows(players)}</tbody></table>`;
+ return `<section class="box" data-box-key="${esc(key)}"><div class="box-heading" data-view-key="box-${esc(team.code)}"><h3>${esc(team.code)}</h3><span>Box Score · Full roster</span></div><div class="table-wrap roster-viewport" tabindex="0" role="region" aria-label="${esc(team.name)} player statistics">${roster.length?`${table(starters)}${bench.length?`<div class="bench-divider">Bench</div>${table(bench,true)}`:''}`:'<p class="muted">Full roster is loading. Refresh if it remains unavailable.</p>'}</div></section>`;
 }
 
 export function quarterTable(game){

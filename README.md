@@ -31,11 +31,10 @@ The collector captures yesterday/current/next NBA dates, retains up to seven dat
 - Bigger game clocks and tip-off times. The title, current time, tip-offs and last-update time use the device's time zone and locale. Each tip-off includes its date and zone abbreviation. No fixed Auckland zone is used in the interface.
 - The NBA date selector remains a US Eastern game date. **Today** opens the current NBA slate, retaining the previous Eastern date until 06:00 ET so late games remain visible. Returning to the app follows the new slate if you were viewing Today.
 - Team abbreviations, full team names, scores, season records and conference positions. A compact scoring table shows Q1–Q4, each applicable overtime period (OT1, OT2, etc.) and the total. Live quarters show their score so far; future or missing quarters show a dash.
-- Tables are labeled **Box Score**. Five played athletes per team are ranked by Hollinger Game Score. Full names and jerseys; PTS, REB, AST, STL, BLK, TO, FG, 3PT and FT. Shooting is made/attempted. Names sit above evenly spaced numeric columns on phone screens so numbers can be larger. Desktop rows place names alongside their statistics.
+- Tables are labeled **Box Score**. All played athletes are shown, starters first and then bench, in a fixed-height scroll area. Full names and jerseys; PTS, REB, AST, STL, BLK, TO, FG, 3PT and FT. Shooting is made/attempted. Names sit above evenly spaced numeric columns on phone screens so numbers can be larger. Desktop rows place names alongside their statistics.
 - Stat highlights use number colour only, with no background: Strong performances use bold bright lime: PTS ≥20; REB/AST ≥10; STL/BLK ≥4. PTS from 10–19 and REB/AST from 5–9 use leaf green to signal rising performance, with less brightness and weight than the lime tier. TO ≥5 is highlighted in red, also without a background. Other values retain normal styling. Missing values show `—`.
-- One or two notes drawn from matching player thresholds, triple-doubles or supported scoring runs. Notes are computed from feed data, not editorial news. Scoring runs use ordered score changes; corrected play-by-play suppresses run detection.
 - No footer logo, slogan or website explanation. Data/ranking details are documented here rather than taking space on the scoreboard.
-- Score and highlight refreshes preserve the visible game/player row, keyboard focus and horizontal table/navigation position. Games keep their order while viewing the same date.
+- Score and highlight refreshes preserve the visible game/player row, keyboard focus and horizontal table/navigation position. Cards sort by live, finished, then upcoming. Live games use newest tip-off first; finished games use newest recorded finish first (tip-off if unavailable); upcoming games use earliest tip-off first. Viewing position is anchored when refreshed ordering changes.
 - A non-blocking “Game stat updated.” toast appears at the top right for three seconds after a successful score refresh.
 - Loading skeletons, score-first rendering, manual refresh, last-fetch age, stale/empty/error states, reduced-motion support, accessible tables and keyboard navigation.
 - Latest five viewed slates cached for seven days; offline shell and bounded snapshot cache. Saved in-progress games say **LAST SEEN**. The clock is observed feed data; it is never advanced by an invented countdown.
@@ -61,7 +60,6 @@ The snapshot collector avoids browser CORS dependence but cannot fix an outage a
 
 ESPN's inspected `playoffSeed` description calls it a BPI projection. When no reliable conference rank is supplied, positions are calculated from conference win percentage; `=` marks ties. NBA tie-breaks are not guessed. Historical games show latest fetched standings. Player names and jerseys are used as returned, without invented biography data.
 
-Game Score penalizes missed shots, turnovers and fouls while rewarding points, rebounds, assists, steals and blocks. Its numeric value is on each name's tooltip. If required fields are absent, the whole team explicitly falls back to points ranking.
 
 ## Local use
 
@@ -83,13 +81,12 @@ The service-worker cache is versioned. Reload an open page to obtain an update; 
 
 ## Files
 
-`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared parsing, ranking, notes and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: collection and deployment. `scripts/highlights.mjs`: YouTube collection. `js/highlights.mjs`: link rendering. `data/`: dated fallback snapshots.
+`index.html`, `styles.css`, `js/app.mjs`: interface and behavior. `js/view.mjs`: player tables and device-time formatting. `js/data.mjs`: shared roster parsing and data orchestration. `manifest.webmanifest`, `sw.js`, `icons/`: install/offline support. `scripts/snapshot.mjs`: collector. `.github/workflows/pages.yml`: collection and deployment. `scripts/highlights.mjs`: YouTube collection. `js/highlights.mjs`: link rendering. `data/`: dated fallback snapshots.
 
 ## References
 
 - [GitHub Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 - [GitHub schedule limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
-- [Game Score formula](https://www.basketball-reference.com/about/glossary.html)
 
 ## YouTube game highlights (key-free)
 
@@ -129,3 +126,7 @@ Final games become eligible at 90 minutes, with a catch-up/follow-up pass at 120
 GitHub can still delay/drop the initial scheduled watcher start. Once running, collections no longer require another cron event. Runner provisioning, service outages, exhausted retries, cache/artifact loss, partial ESPN/YouTube availability and the five-success target can still delay coverage. The watcher occupies a runner while waiting. Late games that are not eligible before 10 PM are considered on the next day; a late start may collect older eligible games immediately. This cannot guarantee every game's 1–2-hour target.
 
 The unlisted `/admin.html` page shows the last published collection receipt and GitHub watcher status, and links to the watcher and direct-collection workflows. It is public, not an access-controlled admin server. GitHub sign-in and repository write permissions protect workflow launch; no tokens/passwords are embedded in the site. It is not linked from the public scoreboard and requests no indexing. Open GitHub controls, choose Run workflow, keep main selected, leave the internal batch field empty for direct collection, then confirm. The page never calls the dispatch endpoint itself.
+
+## Box score roster
+
+Every team shows its full played roster in a fixed 330px scroll area, with starters first and a Bench divider before reserves. DNP entries are excluded. There is no top-performer mode, view selector, bench collapse control or Game Notes section. Sticky stat headers and preserved scroll positions keep the complete roster easy to scan without enlarging a game card. Older snapshots without roster data show a loading message until refreshed. Game sorting remains live (latest tip-off), finished (latest recorded finish, or tip-off when unavailable), then upcoming (earliest tip-off).

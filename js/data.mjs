@@ -14,11 +14,9 @@ export function nbaDate(now = new Date()) {
   const hour = +new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(now);
   return hour < 6 ? shiftDate(date, -1) : date;
 }
-export function gameScore(s) {
-  return s.pts + .4*s.fgm - .7*s.fga - .4*(s.fta-s.ftm) + .7*s.oreb + .3*s.dreb + s.stl + .7*s.ast + .7*s.blk - .4*s.pf - s.to;
-}
 const numeric = v => v !== undefined && v !== null && v !== '' && v !== '--' && Number.isFinite(Number(v)) ? Number(v) : null;
 const pair = v => /^\d+[-/]\d+$/.test(String(v)) ? String(v).split(/[-/]/).map(Number) : [null, null];
+export function sortGames(games){const order={in:0,post:1,pre:2};return [...games].sort((a,b)=>(order[a.state]??3)-(order[b.state]??3)||((a.state==='pre'?1:-1)*(Date.parse(a.state==='post'?(a.finishedAt||a.start):a.start)-Date.parse(b.state==='post'?(b.finishedAt||b.start):b.start)))||String(a.id).localeCompare(String(b.id)));}
 export function parsePlayers(boxscore, teamId) {
   const team = boxscore?.players?.find(t => String(t.team?.id) === String(teamId));
   const players = new Map();
@@ -29,16 +27,12 @@ export function parsePlayers(boxscore, teamId) {
       const v = Object.fromEntries(labels.map((k, i) => [k.toUpperCase(), row.stats[i]]));
       const [fgm, fga] = pair(v.FG), [tpm, tpa] = pair(v['3PT'] ?? v['3P']), [ftm, fta] = pair(v.FT);
       const s = {pts:numeric(v.PTS),reb:numeric(v.REB),ast:numeric(v.AST),stl:numeric(v.STL),blk:numeric(v.BLK),oreb:numeric(v.OREB),dreb:numeric(v.DREB),pf:numeric(v.PF),to:numeric(v.TO),fgm,fga,tpm,tpa,ftm,fta};
-      const complete = ['pts','fgm','fga','ftm','fta','oreb','dreb','stl','ast','blk','pf','to'].every(k => s[k] !== null);
-      const p = { id:String(row.athlete.id), name:row.athlete.fullName || row.athlete.displayName || 'Unknown player', jersey:row.athlete.jersey ?? null, ...s, rating:complete ? gameScore(s) : null };
+      const p = { starter:row.starter===true, minutes:v.MIN??null, id:String(row.athlete.id), name:row.athlete.fullName || row.athlete.displayName || 'Unknown player', jersey:row.athlete.jersey ?? null, ...s };
       players.set(p.id, p);
     }
   }
   const all = [...players.values()];
-  // Never mix incomplete Game Scores with complete scores: fall back for the whole team.
-  const ranked = all.every(p => p.rating !== null);
-  all.sort((a,b) => (ranked ? b.rating-a.rating : (b.pts??0)-(a.pts??0)) || (b.pts??0)-(a.pts??0) || a.name.localeCompare(b.name));
-  return { players:all.slice(0,5), all, ranking:ranked ? 'Game Score' : 'Points · incomplete box score' };
+  return { players:all, all, ranking:'Roster' };
 }
 export function parseStandings(raw) {
   const result = {};
@@ -84,52 +78,16 @@ export function normalizeScoreboard(raw, date, standings = {}) {
     }).filter(Boolean)
   };
 }
-export function scoringRun(plays, game) {
-  // Sequence numbers, not timestamps, define order; score corrections break the run.
-  const ordered = [...plays].filter(p=>Number.isFinite(+p.sequenceNumber)).sort((a,b)=>+a.sequenceNumber- +b.sequenceNumber);
-  let previous=null, side=null, points=0, best=null, last=null;
-  for (const p of ordered) {
-    const away=numeric(p.awayScore), home=numeric(p.homeScore);
-    if (away===null||home===null) { previous=null; side=null; points=0; continue; }
-    if (!previous) { previous={away,home}; continue; }
-    const da=away-previous.away, dh=home-previous.home; previous={away,home};
-    if (!da&&!dh) continue;
-    if (da<0||dh<0) return null; // A corrected feed cannot substantiate an uninterrupted run.
-    if ((da&&dh)||Math.max(da,dh)>4) { side=null;points=0;continue; }
-    const next=da>0?'away':'home'; points=side===next ? points+da+dh : da+dh; side=next;
-    last={side,points,period:p.period?.number,clock:p.clock?.displayValue};
-    if (!best||points>=best.points) best={...last};
-  }
-  const run=game.state==='in' && last?.points>=8 ? last : best;
-  if (!run||run.points<10) return null;
-  // Live wording only if this really is the trailing uninterrupted scoring sequence.
-  const active=game.state==='in' && last?.side===run.side && last?.points===run.points;
-  return `${game[run.side].code} ${active?'on':'had'} ${/^(8|11|18)$/.test(String(run.points))?'an':'a'} ${run.points}–0 run${run.period ? ` · ${run.period>4?'OT'+(run.period-4):'Q'+run.period} ${run.clock||''}` : ''}`;
-}
 export function isHighlightedStat(key, value) {
   const thresholds = {pts:20, reb:10, ast:10, stl:4, blk:4};
   return value != null && Number.isFinite(Number(value)) && thresholds[key] !== undefined && Number(value) >= thresholds[key];
-}
-export function makeNotes(game, allPlayers, plays=[]) {
-  const notes=[], run=scoringRun(plays, game);
-  if(run) notes.push(run);
-  const complete=allPlayers.every(p=>p.rating!==null);
-  const players=[...allPlayers].sort((a,b)=>complete?b.rating-a.rating:(b.pts??0)-(a.pts??0));
-  const first=players.find(p=>[p.pts,p.reb,p.ast,p.stl,p.blk].filter(v=>v>=10).length>=3);
-  const summary=p=>[['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK']]
-    .filter(([key])=>isHighlightedStat(key,p[key])).map(([key,label])=>`${p[key]} ${label}`).join(' · ');
-  if(first) notes.push(`${first.name}: ${summary(first)} (triple-double)`);
-  if(notes.length<2) {
-    const notable=players.find(p=>p!==first && ['pts','reb','ast','stl','blk'].some(key=>isHighlightedStat(key,p[key])));
-    if(notable) notes.push(`${notable.name}: ${summary(notable)}`);
-  }
-  return notes.slice(0,2);
 }
 export function applySummary(game, summary) {
   if (!summary?.boxscore || !Array.isArray(summary.boxscore.players)) throw new Error('Player stats unavailable');
   const away=parsePlayers(summary.boxscore,game.away.id), home=parsePlayers(summary.boxscore,game.home.id);
   if(!away.all.length || !home.all.length) throw new Error('Player stats pending');
-  return {...game, away:{...game.away,players:away.players,ranking:away.ranking},home:{...game.home,players:home.players,ranking:home.ranking},notes:makeNotes(game,[...away.all,...home.all],summary.plays||[]),detailsUpdatedAt:new Date().toISOString(),detailsError:false};
+  const end=game.state==='post'?(summary.plays||[]).filter(p=>p.wallclock&&p.period?.number>=Math.max(4,game.period||0)&&/end of.*(?:quarter|period|game)|game end/i.test(p.text||'')).at(-1)?.wallclock:null;
+  return {...game, finishedAt:end||game.finishedAt||null, away:{...game.away,players:away.players,roster:away.all,ranking:away.ranking},home:{...game.home,players:home.players,roster:home.all,ranking:home.ranking},notes:[],detailsUpdatedAt:new Date().toISOString(),detailsError:false};
 }
 export async function getJSON(url, {timeout=9000,fetcher=globalThis.fetch}={}) {
   const response=await fetcher(url,{signal:AbortSignal.timeout(timeout),cache:'no-store',credentials:'omit'});
@@ -149,8 +107,8 @@ export async function loadSlate(date,{onProgress=()=>{},previous=null,fetchJSON=
   for(const game of slate.games) {
     const old=previous?.date===date ? previous.games?.find(g=>g.id===game.id) : null;
     if(old && game.state!=='pre') {
-      for(const side of ['away','home']) Object.assign(game[side],{players:old[side].players||[],ranking:old[side].ranking||'Game Score'});
-      game.detailsUpdatedAt=old.detailsUpdatedAt; game.detailsError=!!old.detailsUpdatedAt;
+      for(const side of ['away','home']) Object.assign(game[side],{players:old[side].roster||old[side].players||[],roster:old[side].roster||null,ranking:old[side].ranking||'Game Score'});
+      game.finishedAt=old.finishedAt||null;game.detailsUpdatedAt=old.detailsUpdatedAt; game.detailsError=!!old.detailsUpdatedAt;
     }
   }
   onProgress(structuredClone(slate));
@@ -170,7 +128,7 @@ export async function loadSlate(date,{onProgress=()=>{},previous=null,fetchJSON=
   await mapLimit(slate.games.filter(g=>g.state!=='pre'),3,async(game)=>{
     const old=previous?.games?.find(g=>g.id===game.id);
     // Final boxes are stable enough to reuse for ten minutes; scores always fetch afresh.
-    if(game.state==='post' && old?.state==='post' && old.detailsUpdatedAt && !old.detailsError && Date.now()-Date.parse(old.detailsUpdatedAt)<600000) {game.notes=old.notes;game.detailsError=false;return;}
+    if(game.state==='post' && old?.state==='post' && old.detailsUpdatedAt && !old.detailsError && old.away.roster && old.home.roster && Date.now()-Date.parse(old.detailsUpdatedAt)<600000) {game.notes=old.notes;game.detailsError=false;return;}
     try {
       const result=applySummary(game,await fetchJSON(`${API}/apis/site/v2/sports/basketball/nba/summary?event=${game.id}`));
       Object.assign(game,result);
